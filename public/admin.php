@@ -70,16 +70,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $delPrev->execute([$appId]);
 
         $insG = $pdo->prepare('
-            INSERT INTO `GrantEvaluation` (id, applicationId, adminId, approvedGrant, approvedAmounts, approvedTotal, timeline, recommendationNote, secDecisionNote, termsAcknowledged, status, submittedAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "SUBMITTED", NOW(3))
+            INSERT INTO `GrantEvaluation` (id, applicationId, adminId, status, assessmentDate, decision, approvedTotal, amounts, timeline, note, secDecisionNote, termsAcknowledged, decidedAt)
+            VALUES (?, ?, ?, "SUBMITTED", NOW(3), ?, ?, ?, ?, ?, ?, ?, NOW(3))
         ');
         $insG->execute([
             $evalId,
             $appId,
             $currentUser['id'],
             $approvedGrant,
-            json_encode($approvedAmounts, JSON_UNESCAPED_UNICODE),
             $approvedTotal,
+            json_encode($approvedAmounts, JSON_UNESCAPED_UNICODE),
             json_encode($timeline, JSON_UNESCAPED_UNICODE),
             $recommendationNote,
             $secDecisionNote,
@@ -137,11 +137,11 @@ if ($appId) {
     $existingFormB = $geStmt->fetch();
 
     $formBData = [
-        'approvedGrant' => $existingFormB['approvedGrant'] ?? ($application['grantType'] ?? 'PROOF'),
-        'approvedAmounts' => json_decode($existingFormB['approvedAmounts'] ?? '{}', true) ?: [],
+        'approvedGrant' => $existingFormB['decision'] ?? ($existingFormB['approvedGrant'] ?? ($application['grantType'] ?? 'PROOF')),
+        'approvedAmounts' => json_decode($existingFormB['amounts'] ?? ($existingFormB['approvedAmounts'] ?? '{}'), true) ?: [],
         'approvedTotal' => (float)($existingFormB['approvedTotal'] ?? $application['requestedTotal']),
         'timeline' => json_decode($existingFormB['timeline'] ?? '{}', true) ?: [],
-        'recommendationNote' => $existingFormB['recommendationNote'] ?? '',
+        'recommendationNote' => $existingFormB['note'] ?? ($existingFormB['recommendationNote'] ?? ''),
         'secDecisionNote' => $existingFormB['secDecisionNote'] ?? '',
         'status' => $existingFormB['status'] ?? 'DRAFT'
     ];
