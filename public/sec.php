@@ -212,8 +212,8 @@ $milestoneItems = $miStmt->fetchAll();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
-    // 1. Partial Form A Section Save (AJAX or normal POST)
-    if ($action === 'save_form_a_draft' || isset($_POST['form_a_tab'])) {
+    // 1. Save Form A (Draft or Final Submission)
+    if ($action === 'save_form_a_draft' || $action === 'submit_form_a' || isset($_POST['form_a_tab'])) {
         $preChecks = [
             'agreementChecked' => !empty($_POST['agreementChecked']),
             'priorFundingChecked' => !empty($_POST['priorFundingChecked']),
@@ -228,9 +228,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             'irl' => (int)($_POST['eval_irl'] ?? 1)
         ];
 
-        // 12 questions
-        $answers = [];
-        $notes = [];
+        // 12 questions (merge with existing so unanswered questions are not lost)
+        $existingAnswers = $assData['experimentForm']['answers'] ?? [];
+        $existingNotes = $assData['experimentForm']['notes'] ?? [];
+        $answers = $existingAnswers;
+        $notes = $existingNotes;
         for ($q = 1; $q <= 12; $q++) {
             if (isset($_POST["q_$q"])) {
                 $answers[$q] = ($_POST["q_$q"] === '1');
@@ -250,14 +252,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $calcTotal += $amt;
         }
 
-        $recommendation = trim((string)($_POST['eval_recommendation'] ?? ''));
-        $suggestedGrant = $_POST['eval_suggestedGrant'] ?? 'PROOF';
+        $recommendation = trim((string)($_POST['eval_recommendation'] ?? ($myAssessment['recommendation'] ?? '')));
+        $suggestedGrant = $_POST['eval_suggestedGrant'] ?? ($myAssessment['suggestedGrant'] ?? 'PROOF');
 
-        $upd = $pdo->prepare('
-            UPDATE `Assessment`
-            SET preChecks = ?, statusForm = ?, experimentForm = ?, suggestedAmounts = ?, recommendation = ?, suggestedGrant = ?, assessmentDate = NOW(3)
-            WHERE id = ?
-        ');
+        // Also save shared milestone state/remarks if submitted with form
+        if (isset($_POST['milestone_state']) && is_array($_POST['milestone_state'])) {
+            $uItem = $pdo->prepare('UPDATE `MilestoneItem` SET state = ?, ownerRemark = ?, updatedAt = NOW(3) WHERE id = ?');
+            foreach ($_POST['milestone_state'] as $mItemId => $mState) {
+                $mRem = trim((string)($_POST['milestone_remark'][$mItemId] ?? ''));
+                $uItem->execute([$mState, $mRem, $mItemId]);
+            }
+        }
+
+        $isSubmit = ($action === 'submit_form_a');
+        $newStatus = $isSubmit ? 'SUBMITTED' : ($myAssessment['status'] ?? 'DRAFT');
+
+        if ($isSubmit) {
+            $upd = $pdo->prepare('
+                UPDATE `Assessment`
+                SET preChecks = ?, statusForm = ?, experimentForm = ?, suggestedAmounts = ?, recommendation = ?, suggestedGrant = ?, status = "SUBMITTED", submittedAt = NOW(3), assessmentDate = NOW(3)
+                WHERE id = ?
+            ');
+        } else {
+            $upd = $pdo->prepare('
+                UPDATE `Assessment`
+                SET preChecks = ?, statusForm = ?, experimentForm = ?, suggestedAmounts = ?, recommendation = ?, suggestedGrant = ?, assessmentDate = NOW(3)
+                WHERE id = ?
+            ');
+        }
+
         $upd->execute([
             json_encode($preChecks, JSON_UNESCAPED_UNICODE),
             json_encode($statusForm, JSON_UNESCAPED_UNICODE),
@@ -268,29 +291,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $myAssessment['id']
         ]);
 
-        if (isset($_SERVER['HTTP_X_REQUESTED_WITH'])) {
+        if ($isSubmit) {
+            $pdo->prepare('UPDATE `Application` SET status = "IN_REVIEW" WHERE id = ?')->execute([$appId]);
+            Auth::audit('SUBMIT_FORM_A', 'Assessment', $myAssessment['id'], ['applicationId' => $appId]);
+        }
+
+        $isAjax = isset($_SERVER['HTTP_X_REQUESTED_WITH']) || !empty($_POST['is_ajax']);
+        if ($isAjax) {
             header('Content-Type: application/json');
-            echo json_encode(['success' => true, 'total' => $calcTotal]);
+            echo json_encode(['success' => true, 'total' => $calcTotal, 'status' => $newStatus]);
             exit;
         }
-        header("Location: /sec.php?id=" . urlencode($appId));
+
+        $activeTab = $_POST['form_a_tab'] ?? 'sop';
+        $extraParam = $isSubmit ? '&submitted=1' : '&saved=1';
+        header("Location: /sec.php?id=" . urlencode($appId) . "&tab=" . urlencode($activeTab) . $extraParam);
         exit;
     }
 
-    // 2. Final Submit Form A
-    if ($action === 'submit_form_a') {
-        $sub = $pdo->prepare('UPDATE `Assessment` SET status = "SUBMITTED", submittedAt = NOW(3) WHERE id = ?');
-        $sub->execute([$myAssessment['id']]);
-
-        // If all 3 submitted or at least 1, mark application IN_REVIEW
-        $pdo->prepare('UPDATE `Application` SET status = "IN_REVIEW" WHERE id = ?')->execute([$appId]);
-        Auth::audit('SUBMIT_FORM_A', 'Assessment', $myAssessment['id'], ['applicationId' => $appId]);
-
-        header("Location: /sec.php?id=" . urlencode($appId));
-        exit;
-    }
-
-    // 3. Update Shared Milestone State (Collaborative)
+    // 2. Update Shared Milestone State (Collaborative Real-time)
     if ($action === 'update_milestone_item') {
         $itemId = $_POST['itemId'] ?? '';
         $state = $_POST['state'] ?? 'PENDING';
@@ -532,6 +551,21 @@ require_once __DIR__ . '/../templates/header.php';
     <!-- RIGHT PANE: INTERACTIVE SEC FORM A SCORING -->
     <div id="split-right-pane" class="hidden lg:block w-full lg:w-1/2 h-full overflow-y-scroll bg-white p-6 space-y-6">
 
+      <?php if (!empty($_GET['submitted'])): ?>
+        <div class="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-900 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+            <span class="font-bold">Form A Evaluation Submitted Successfully! Your recommendations and scores have been recorded.</span>
+          </div>
+          <span class="text-[10px] uppercase font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded">Status: Submitted</span>
+        </div>
+      <?php elseif (!empty($_GET['saved'])): ?>
+        <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-xs text-blue-900 flex items-center gap-2">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path></svg>
+          <span>Form A Draft saved successfully.</span>
+        </div>
+      <?php endif; ?>
+
       <!-- Form A Navigation Tabs -->
       <div class="flex items-center gap-1 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-none text-xs font-bold">
         <button type="button" onclick="switchFormATab('sop')" id="tab-btn-sop" class="form-a-tab px-3 py-2 rounded-xl bg-purple-600 text-white">
@@ -555,7 +589,7 @@ require_once __DIR__ . '/../templates/header.php';
       </div>
 
       <form id="sec-form-a" method="POST" action="/sec.php?id=<?= urlencode($appId) ?>" class="space-y-6">
-        <input type="hidden" name="action" value="save_form_a_draft">
+        <input type="hidden" name="action" id="sec-form-action" value="save_form_a_draft">
         <input type="hidden" name="form_a_tab" id="formATabInput" value="sop">
 
         <!-- TAB 1: SOP PRE-CHECKS (Policy P4.1–6) -->
@@ -605,8 +639,11 @@ require_once __DIR__ . '/../templates/header.php';
           </div>
 
           <!-- Bottom Save & Next -->
-          <div class="pt-4 border-t flex justify-end">
-            <button type="button" onclick="saveAndNextFormATab('levels')" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">
+          <div class="pt-4 border-t flex justify-end items-center gap-2">
+            <button type="button" onclick="saveFormADraft(this)" class="px-3.5 py-2 bg-gray-200 text-gray-800 font-bold text-xs rounded-xl hover:bg-gray-300">
+              Save Draft
+            </button>
+            <button type="button" onclick="saveAndNextFormATab('levels', this)" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">
               Save & Next: Status Levels →
             </button>
           </div>
@@ -656,9 +693,16 @@ require_once __DIR__ . '/../templates/header.php';
           </div>
 
           <!-- Bottom Controls -->
-          <div class="pt-4 border-t flex justify-between">
+          <div class="pt-4 border-t flex justify-between items-center">
             <button type="button" onclick="switchFormATab('sop')" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold text-xs rounded-xl hover:bg-gray-200">← Back</button>
-            <button type="button" onclick="saveAndNextFormATab('milestones')" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">Save & Next: Milestones →</button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="saveFormADraft(this)" class="px-3.5 py-2 bg-gray-200 text-gray-800 font-bold text-xs rounded-xl hover:bg-gray-300">
+                Save Draft
+              </button>
+              <button type="button" onclick="saveAndNextFormATab('milestones', this)" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">
+                Save & Next: Milestones →
+              </button>
+            </div>
           </div>
         </div>
 
@@ -674,13 +718,14 @@ require_once __DIR__ . '/../templates/header.php';
               <div class="p-3.5 rounded-xl border border-gray-200 bg-gray-50 space-y-2 text-xs">
                 <div class="flex items-center justify-between">
                   <span class="font-bold text-gray-900"><?= htmlspecialchars($mItem['name']) ?></span>
-                  <select onchange="updateMilestoneItem('<?= $mItem['id'] ?>', this.value, this.closest('div').nextElementSibling.value)" class="p-1 border rounded-lg text-xs bg-white font-bold">
+                  <select name="milestone_state[<?= $mItem['id'] ?>]" onchange="updateMilestoneItem('<?= $mItem['id'] ?>', this.value, this.closest('div').nextElementSibling.value)" class="p-1 border rounded-lg text-xs bg-white font-bold">
                     <option value="PENDING" <?= $mItem['state'] === 'PENDING' ? 'selected' : '' ?>>Pending</option>
                     <option value="COMPLETED" <?= $mItem['state'] === 'COMPLETED' ? 'selected' : '' ?>>Completed ✓</option>
                   </select>
                 </div>
                 <input 
                   type="text" 
+                  name="milestone_remark[<?= $mItem['id'] ?>]"
                   value="<?= htmlspecialchars($mItem['ownerRemark'] ?? '') ?>" 
                   placeholder="Committee remarks..."
                   onblur="updateMilestoneItem('<?= $mItem['id'] ?>', this.previousElementSibling.querySelector('select').value, this.value)"
@@ -691,9 +736,16 @@ require_once __DIR__ . '/../templates/header.php';
           </div>
 
           <!-- Bottom Controls -->
-          <div class="pt-4 border-t flex justify-between">
+          <div class="pt-4 border-t flex justify-between items-center">
             <button type="button" onclick="switchFormATab('levels')" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold text-xs rounded-xl hover:bg-gray-200">← Back</button>
-            <button type="button" onclick="saveAndNextFormATab('experiment')" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">Save & Next: 12 Questions →</button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="saveFormADraft(this)" class="px-3.5 py-2 bg-gray-200 text-gray-800 font-bold text-xs rounded-xl hover:bg-gray-300">
+                Save Draft
+              </button>
+              <button type="button" onclick="saveAndNextFormATab('experiment', this)" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">
+                Save & Next: 12 Questions →
+              </button>
+            </div>
           </div>
         </div>
 
@@ -741,9 +793,16 @@ require_once __DIR__ . '/../templates/header.php';
           </div>
 
           <!-- Bottom Controls -->
-          <div class="pt-4 border-t flex justify-between">
+          <div class="pt-4 border-t flex justify-between items-center">
             <button type="button" onclick="switchFormATab('milestones')" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold text-xs rounded-xl hover:bg-gray-200">← Back</button>
-            <button type="button" onclick="saveAndNextFormATab('grant')" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">Save & Next: Budget Moderation →</button>
+            <div class="flex items-center gap-2">
+              <button type="button" onclick="saveFormADraft(this)" class="px-3.5 py-2 bg-gray-200 text-gray-800 font-bold text-xs rounded-xl hover:bg-gray-300">
+                Save Draft
+              </button>
+              <button type="button" onclick="saveAndNextFormATab('grant', this)" class="px-4 py-2 bg-purple-600 text-white font-bold text-xs rounded-xl hover:bg-purple-700 shadow-xs">
+                Save & Next: Budget Moderation →
+              </button>
+            </div>
           </div>
         </div>
 
@@ -760,7 +819,7 @@ require_once __DIR__ . '/../templates/header.php';
             <div class="grid grid-cols-2 gap-3 text-xs">
               <?php foreach (['VALIDATION' => 'Validation Grant', 'PROOF' => 'Proof Grant', 'SCALING' => 'Scaling Grant', 'REJECTED' => 'None / Application Rejected'] as $dKey => $dLabel): ?>
                 <label class="cursor-pointer border rounded-xl p-3 flex items-center gap-2 <?= ($assData['suggestedGrant'] === $dKey) ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-600 font-bold' : 'border-gray-200 hover:border-gray-300' ?>">
-                  <input type="radio" name="eval_suggestedGrant" value="<?= $dKey ?>" <?= ($assData['suggestedGrant'] === $dKey) ? 'checked' : '' ?> class="text-purple-600 focus:ring-purple-500">
+                  <input type="radio" name="eval_suggestedGrant" value="<?= $dKey ?>" <?= ($assData['suggestedGrant'] === $dKey) ? 'checked' : '' ?> onchange="selectSecGrantTier(this)" class="text-purple-600 focus:ring-purple-500">
                   <span><?= htmlspecialchars($dLabel) ?></span>
                 </label>
               <?php endforeach; ?>
@@ -815,7 +874,7 @@ require_once __DIR__ . '/../templates/header.php';
               </button>
               <button 
                 type="submit" 
-                onclick="document.querySelector('input[name=action]').value = 'submit_form_a'"
+                onclick="document.getElementById('sec-form-action').value = 'submit_form_a'"
                 class="px-5 py-2.5 bg-green-600 text-white font-extrabold text-xs rounded-xl hover:bg-green-700 shadow-md"
               >
                 Submit Form A Evaluation ✓
@@ -857,8 +916,10 @@ function switchFormATab(tabName) {
   }
 }
 
-async function saveAndNextFormATab(nextTab) {
+async function saveAndNextFormATab(nextTab, btn) {
+  if (btn) btn.innerText = 'Saving...';
   await saveFormADraft(null);
+  if (btn) btn.innerText = 'Saved ✓';
   switchFormATab(nextTab);
 }
 
@@ -866,6 +927,7 @@ async function saveFormADraft(btn) {
   const formEl = document.getElementById('sec-form-a');
   const fd = new FormData(formEl);
   fd.set('action', 'save_form_a_draft');
+  fd.set('is_ajax', '1');
 
   if (btn) btn.innerText = 'Saving...';
   try {
@@ -876,12 +938,34 @@ async function saveFormADraft(btn) {
     });
     const data = await res.json();
     if (data.success) {
-      if (btn) btn.innerText = 'Saved ✓';
-      setTimeout(() => { if (btn) btn.innerText = 'Save Draft'; }, 1500);
+      if (btn) {
+        btn.innerText = 'Saved ✓';
+        setTimeout(() => { if (btn) btn.innerText = 'Save Draft'; }, 1500);
+      }
+      return true;
+    } else {
+      if (btn) btn.innerText = 'Error';
+      return false;
     }
   } catch (e) {
     if (btn) btn.innerText = 'Error';
+    return false;
   }
+}
+
+function selectSecGrantTier(inputEl) {
+  document.querySelectorAll('input[name="eval_suggestedGrant"]').forEach(inp => {
+    const card = inp.closest('label');
+    if (card) {
+      if (inp.checked) {
+        card.classList.add('border-purple-600', 'bg-purple-50', 'ring-2', 'ring-purple-600', 'font-bold');
+        card.classList.remove('border-gray-200');
+      } else {
+        card.classList.remove('border-purple-600', 'bg-purple-50', 'ring-2', 'ring-purple-600', 'font-bold');
+        card.classList.add('border-gray-200');
+      }
+    }
+  });
 }
 
 function updateDecisionGuide() {
@@ -908,6 +992,15 @@ function recalculateSecTotal() {
 }
 recalculateSecTotal();
 updateDecisionGuide();
+
+// Initialize active tab from query param if available
+(function() {
+  const urlParams = new URLSearchParams(window.location.search);
+  const initialTab = urlParams.get('tab');
+  if (initialTab && ['sop', 'levels', 'milestones', 'experiment', 'grant'].includes(initialTab)) {
+    switchFormATab(initialTab);
+  }
+})();
 
 async function updateMilestoneItem(itemId, state, remark) {
   const fd = new FormData();

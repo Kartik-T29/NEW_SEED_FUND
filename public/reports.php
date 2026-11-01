@@ -600,7 +600,8 @@ $pageTitle = match($type) {
                             foreach (Constants::TIMELINE_DATES as $tKey => $tLabel):
                                 $tTitle = is_array($tLabel) ? ($tLabel['label'] ?? $tKey) : $tLabel;
                                 $dateVal = $evalTimeline[$tKey] ?? '';
-                                $displayDate = !empty($dateVal) ? date('d M Y', strtotime($dateVal)) : 'To be assigned';
+                                $ts = !empty($dateVal) ? strtotime($dateVal) : false;
+                                $displayDate = ($ts !== false) ? date('d M Y', $ts) : (!empty($dateVal) ? $dateVal : 'To be assigned');
                         ?>
                             <tr class="hover:bg-slate-50">
                                 <td class="p-2 border-r border-slate-200 text-center font-mono font-bold text-slate-500"><?= $stageNo++ ?></td>

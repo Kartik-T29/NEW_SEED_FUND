@@ -259,7 +259,8 @@ require_once __DIR__ . '/../templates/header.php';
                             $stepTitle = is_array($label) ? ($label['label'] ?? $key) : $label;
                             $val = $evalTimeline[$key] ?? '';
                             $hasDate = !empty($val);
-                            $dateFormatted = $hasDate ? date('d M Y', strtotime($val)) : 'Scheduled by SEC';
+                            $ts = $hasDate ? strtotime($val) : false;
+                            $dateFormatted = ($ts !== false) ? date('d M Y', $ts) : ($hasDate ? $val : 'Scheduled by SEC');
                     ?>
                         <div class="relative">
                             <span class="absolute -left-[31px] top-0 w-4 h-4 rounded-full border-2 <?= $hasDate ? 'bg-indigo-600 border-indigo-200' : 'bg-white border-slate-300' ?>"></span>
