@@ -174,6 +174,27 @@ class Constants {
         ]
     ];
 
+    public const ANNEXURE_1_HEADERS = self::BUDGET_HEADERS;
+    public const TIMELINE_DATES = self::FORM_B_TIMELINE_FIELDS;
+
+    public const SEC_PANEL_DESIGNATIONS = [
+        0 => [
+            'domain' => 'Innovation & Product Development',
+            'default_name' => 'Er. Arun Singh Kushwah',
+            'default_designation' => 'Assistant Director (Startups), SOET'
+        ],
+        1 => [
+            'domain' => 'Business & Finance',
+            'default_name' => 'Dr. Ambar Agarwal',
+            'default_designation' => 'Faculty, School of Management'
+        ],
+        2 => [
+            'domain' => 'Market Access & Intelligence',
+            'default_name' => 'Prof. Ashish Chandel',
+            'default_designation' => 'Director, IDEAPAD Incubator'
+        ]
+    ];
+
     // -------------------------------------------------------------
     // P8.2 Milestone Sets
     // -------------------------------------------------------------
@@ -234,6 +255,16 @@ class Constants {
             ]
         ]
     ];
+
+    public static function getFlatRubricQuestions(): array {
+        $flat = [];
+        foreach (self::RUBRIC_QUESTIONS as $group) {
+            foreach ($group['questions'] as $num => $text) {
+                $flat[$num] = $text;
+            }
+        }
+        return $flat;
+    }
 
     // -------------------------------------------------------------
     // P9. Form B Approved Timeline (8 Specific Dates)
@@ -305,4 +336,8 @@ class Constants {
         "The startup will submit all sale vouchers, original invoices, and an expense report with supporting bills to the incubator.",
         "Non-compliance will lead to immediate termination of the grant and future ineligibility."
     ];
+}
+
+if (!class_exists('Constants', false)) {
+    class_alias(Constants::class, 'Constants');
 }

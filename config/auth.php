@@ -12,11 +12,16 @@ use PDO;
 class Auth {
     public static function initSession(): void {
         if (session_status() === PHP_SESSION_NONE) {
-            // Configure secure session cookie parameters
-            ini_set('session.cookie_httponly', '1');
-            ini_set('session.use_only_cookies', '1');
-            ini_set('session.cookie_samesite', 'Lax');
-            session_start();
+            $savePath = ini_get('session.save_path') ?: sys_get_temp_dir();
+            if (!is_dir($savePath) || !is_writable($savePath)) {
+                ini_set('session.save_path', sys_get_temp_dir());
+            }
+            if (!headers_sent()) {
+                ini_set('session.cookie_httponly', '1');
+                ini_set('session.use_only_cookies', '1');
+                ini_set('session.cookie_samesite', 'Lax');
+            }
+            @session_start();
         }
     }
 
@@ -148,8 +153,15 @@ class Auth {
         return $_SESSION['csrf_token'];
     }
 
-    public static function verifyCsrf(?string $token): bool {
+    public static function csrfField(): string {
+        return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(self::csrfToken(), ENT_QUOTES, 'UTF-8') . '">';
+    }
+
+    public static function verifyCsrf(?string $token = null): bool {
         self::initSession();
+        if ($token === null) {
+            $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+        }
         if (empty($token) || empty($_SESSION['csrf_token'])) {
             return false;
         }
@@ -167,10 +179,10 @@ class Auth {
     public static function audit(string $action, string $targetType, ?string $targetId = null, ?array $details = null): void {
         try {
             $pdo = Database::getConnection();
-            $stmt = $pdo->prepare('INSERT INTO `AuditLog` (id, userId, action, targetType, targetId, details, createdAt) VALUES (?, ?, ?, ?, ?, ?, NOW(3))');
+            $stmt = $pdo->prepare('INSERT INTO `AuditLog` (id, actorId, action, entity, entityId, details, at) VALUES (?, ?, ?, ?, ?, ?, NOW(3))');
             $stmt->execute([
                 self::generateId('log'),
-                self::id(),
+                self::id() ?: 'system',
                 $action,
                 $targetType,
                 $targetId,
@@ -180,4 +192,8 @@ class Auth {
             error_log('[Audit Error] ' . $e->getMessage());
         }
     }
+}
+
+if (!class_exists('Auth', false)) {
+    class_alias(Auth::class, 'Auth');
 }

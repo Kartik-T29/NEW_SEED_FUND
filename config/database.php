@@ -50,4 +50,13 @@ class Database {
             throw new RuntimeException('Database connection failed: ' . $e->getMessage());
         }
     }
+
+    public static function getInstance(): PDO {
+        return self::getConnection();
+    }
+}
+
+// Global alias for compatibility
+if (!class_exists('Database', false)) {
+    class_alias(Database::class, 'Database');
 }
