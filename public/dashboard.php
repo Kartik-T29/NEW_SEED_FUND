@@ -1,4 +1,9 @@
 <?php
+/**
+ * IDEAPAD Seed Fund Portal - Startup Grant Application Multi-Section Wizard
+ * 100% Pure Server-Rendered PHP with Tailwind CSS, Save & Next, and Client Image Compression
+ */
+
 declare(strict_types=1);
 
 require_once __DIR__ . '/../config/database.php';
@@ -6,14 +11,15 @@ require_once __DIR__ . '/../config/constants.php';
 require_once __DIR__ . '/../config/auth.php';
 
 use App\Config\Database;
-use App\Config\Constants;
 use App\Config\Auth;
+use App\Config\Constants;
 
 Auth::requireRole('STARTUP');
+
 $user = Auth::user();
 $pdo = Database::getConnection();
 
-// Fetch startup record
+// Fetch Startup profile
 $sStmt = $pdo->prepare('SELECT * FROM `Startup` WHERE userId = ? LIMIT 1');
 $sStmt->execute([$user['id']]);
 $startup = $sStmt->fetch();
@@ -42,6 +48,7 @@ if (!$application) {
         'effortTraction' => '',
         'experiments' => [],
         'selfAssessment' => ['trl' => 1, 'mrl' => 1, 'irl' => 1, 'track' => 'PROTOTYPING', 'milestones' => []],
+        'justifications' => [],
         'agreementAccepted' => false,
         'declarationSigned' => false,
         'declarationDate' => ''
@@ -57,15 +64,36 @@ if (!$application) {
 $isReadOnly = ($application['status'] !== 'DRAFT');
 $formData = json_decode($application['formData'], true) ?: [];
 
+// Normalize legacy keys
+$formData['problemStatement'] = $formData['problemStatement'] ?? $formData['problem'] ?? '';
+$formData['proposedSolution'] = $formData['proposedSolution'] ?? $formData['solution'] ?? '';
+$formData['effortTraction'] = $formData['effortTraction'] ?? $formData['traction'] ?? '';
+$formData['justifications'] = $formData['justifications'] ?? [];
+
 // Fetch budget items
 $bStmt = $pdo->prepare('SELECT * FROM `BudgetItem` WHERE applicationId = ? ORDER BY header ASC, id ASC');
 $bStmt->execute([$application['id']]);
 $budgetItems = $bStmt->fetchAll();
 
+// Calculate initial budget sums
+$directBudgetTotal = 0.00;
+foreach ($budgetItems as $bItem) {
+    $directBudgetTotal += (float)$bItem['total'];
+}
+$contingencyBudgetTotal = round($directBudgetTotal * 0.05, 2);
+$grandBudgetTotal = $directBudgetTotal + $contingencyBudgetTotal;
+$currentRequestedTotal = (float)$application['requestedTotal'] > 0 ? (float)$application['requestedTotal'] : $grandBudgetTotal;
+
 // Fetch uploaded documents
 $dStmt = $pdo->prepare('SELECT * FROM `Document` WHERE applicationId = ? ORDER BY createdAt ASC');
 $dStmt->execute([$application['id']]);
-$documents = $dStmt->fetchAll();
+$uploadedDocs = $dStmt->fetchAll();
+$docsByType = [];
+foreach ($uploadedDocs as $d) {
+    $docsByType[$d['type']] = $d;
+}
+
+$submitErrors = [];
 
 // -------------------------------------------------------------
 // POST Request Handlers (AJAX Partial Save, Upload, Submit)
@@ -75,39 +103,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isReadOnly) {
 
     // 1. Partial Section Save (AJAX or direct form POST)
     if ($action === 'save_draft' || isset($_POST['partial_step'])) {
-        $grantType = $_POST['grantType'] ?? ($application['grantType'] ?? 'PROOF');
-        
-        // Update form data state
-        if (isset($_POST['formData'])) {
-            $submittedForm = json_decode($_POST['formData'], true);
-            if (is_array($submittedForm)) {
-                $formData = array_merge($formData, $submittedForm);
-            }
-        } else {
-            // Read direct form field inputs
-            if (isset($_POST['problemStatement'])) $formData['problemStatement'] = trim((string)$_POST['problemStatement']);
-            if (isset($_POST['proposedSolution'])) $formData['proposedSolution'] = trim((string)$_POST['proposedSolution']);
-            if (isset($_POST['effortTraction'])) $formData['effortTraction'] = trim((string)$_POST['effortTraction']);
-            if (isset($_POST['agreementAccepted'])) $formData['agreementAccepted'] = (bool)$_POST['agreementAccepted'];
-            if (isset($_POST['declarationSigned'])) $formData['declarationSigned'] = (bool)$_POST['declarationSigned'];
-            if (isset($_POST['declarationDate'])) $formData['declarationDate'] = trim((string)$_POST['declarationDate']);
+        $grantType = $_POST['grantType'] ?? $_POST['grantTypeSelect'] ?? ($application['grantType'] ?? 'PROOF');
+        if (!isset(Constants::GRANT_TIERS[$grantType])) {
+            $grantType = $application['grantType'] ?? 'PROOF';
+        }
+        $formData['grantType'] = $grantType;
 
-            // 10 Experiment fields
-            if (isset($_POST['exp']) && is_array($_POST['exp'])) {
-                $formData['experiments'] = $_POST['exp'];
-            }
+        // Read direct form field inputs
+        if (isset($_POST['problemStatement'])) $formData['problemStatement'] = trim((string)$_POST['problemStatement']);
+        if (isset($_POST['proposedSolution'])) $formData['proposedSolution'] = trim((string)$_POST['proposedSolution']);
+        if (isset($_POST['effortTraction'])) $formData['effortTraction'] = trim((string)$_POST['effortTraction']);
+        if (isset($_POST['agreementAccepted'])) $formData['agreementAccepted'] = (bool)$_POST['agreementAccepted'];
+        if (isset($_POST['declarationSigned'])) $formData['declarationSigned'] = (bool)$_POST['declarationSigned'];
+        if (isset($_POST['declarationDate'])) $formData['declarationDate'] = trim((string)$_POST['declarationDate']);
 
-            // Self assessment
-            if (isset($_POST['self_trl'])) $formData['selfAssessment']['trl'] = (int)$_POST['self_trl'];
-            if (isset($_POST['self_mrl'])) $formData['selfAssessment']['mrl'] = (int)$_POST['self_mrl'];
-            if (isset($_POST['self_irl'])) $formData['selfAssessment']['irl'] = (int)$_POST['self_irl'];
-            if (isset($_POST['self_track'])) $formData['selfAssessment']['track'] = (string)$_POST['self_track'];
-            if (isset($_POST['milestones']) && is_array($_POST['milestones'])) {
-                $formData['selfAssessment']['milestones'] = $_POST['milestones'];
+        // Keep standard keys synchronized for reports & evaluation split-view
+        $formData['problem'] = $formData['problemStatement'];
+        $formData['solution'] = $formData['proposedSolution'];
+        $formData['traction'] = $formData['effortTraction'];
+
+        // 10 Experiment fields
+        if (isset($_POST['exp']) && is_array($_POST['exp'])) {
+            $formData['experiments'] = $_POST['exp'];
+        }
+
+        // Self assessment
+        if (isset($_POST['self_trl'])) $formData['selfAssessment']['trl'] = (int)$_POST['self_trl'];
+        if (isset($_POST['self_mrl'])) $formData['selfAssessment']['mrl'] = (int)$_POST['self_mrl'];
+        if (isset($_POST['self_irl'])) $formData['selfAssessment']['irl'] = (int)$_POST['self_irl'];
+        if (isset($_POST['self_track'])) $formData['selfAssessment']['track'] = (string)$_POST['self_track'];
+        if (isset($_POST['milestones']) && is_array($_POST['milestones'])) {
+            $formData['selfAssessment']['milestones'] = $_POST['milestones'];
+        }
+
+        // Justifications handling from Section 5
+        if (isset($_POST['justification_item']) && is_array($_POST['justification_item'])) {
+            $formData['justifications'] = $_POST['justification_item'];
+            $bRows = $pdo->prepare('SELECT id FROM `BudgetItem` WHERE applicationId = ? ORDER BY header ASC, id ASC');
+            $bRows->execute([$application['id']]);
+            $existingBIds = $bRows->fetchAll(PDO::FETCH_COLUMN);
+
+            $updJust = $pdo->prepare('UPDATE `BudgetItem` SET justification = ? WHERE id = ?');
+            foreach ($_POST['justification_item'] as $jKey => $jVal) {
+                $jText = trim((string)$jVal);
+                if (is_numeric($jKey) && isset($existingBIds[(int)$jKey])) {
+                    $updJust->execute([$jText, $existingBIds[(int)$jKey]]);
+                } elseif (is_string($jKey) && str_starts_with($jKey, 'b_')) {
+                    $updJust->execute([$jText, $jKey]);
+                }
             }
         }
 
-        // Budget items handling
+        // Budget items handling from Section 4
         if (isset($_POST['budget_items_json'])) {
             $newItems = json_decode($_POST['budget_items_json'], true);
             if (is_array($newItems)) {
@@ -133,22 +180,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isReadOnly) {
                     ]);
                 }
                 $pdo->commit();
-                $application['requestedTotal'] = $calcTotal;
             }
         }
 
-        // Recalculate total from BudgetItem table
+        // Recalculate direct total and 5% contingency buffer
         $totStmt = $pdo->prepare('SELECT COALESCE(SUM(total), 0) FROM `BudgetItem` WHERE applicationId = ?');
         $totStmt->execute([$application['id']]);
-        $requestedTotal = (float)$totStmt->fetchColumn();
+        $directTotal = (float)$totStmt->fetchColumn();
+        $contingency = round($directTotal * 0.05, 2);
+        $grandTotal = $directTotal + $contingency;
 
         // Update Application record
         $upd = $pdo->prepare('UPDATE `Application` SET grantType = ?, requestedTotal = ?, formData = ?, updatedAt = NOW(3) WHERE id = ?');
-        $upd->execute([$grantType, $requestedTotal, json_encode($formData, JSON_UNESCAPED_UNICODE), $application['id']]);
+        $upd->execute([$grantType, $grandTotal, json_encode($formData, JSON_UNESCAPED_UNICODE), $application['id']]);
 
         if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) || (isset($_POST['partial_step']) && empty($_POST['is_full_submit']))) {
             header('Content-Type: application/json');
-            echo json_encode(['success' => true, 'requestedTotal' => $requestedTotal]);
+            echo json_encode([
+                'success' => true,
+                'requestedTotal' => $grandTotal,
+                'subtotal' => $directTotal,
+                'contingency' => $contingency,
+                'grantType' => $grantType
+            ]);
             exit;
         }
 
@@ -207,6 +261,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isReadOnly) {
 
     // 4. Final Submission Lock
     if ($action === 'final_submit') {
+        // Read declaration and form fields from POST first
+        if (isset($_POST['declarationSigned'])) {
+            $formData['declarationSigned'] = true;
+            $formData['declarationDate'] = date('Y-m-d');
+        }
+
+        $grantType = $_POST['grantType'] ?? ($application['grantType'] ?? 'PROOF');
+        if (!isset(Constants::GRANT_TIERS[$grantType])) {
+            $grantType = 'PROOF';
+        }
+        $formData['grantType'] = $grantType;
+
+        // Recalculate latest budget total
+        $totStmt = $pdo->prepare('SELECT COALESCE(SUM(total), 0) FROM `BudgetItem` WHERE applicationId = ?');
+        $totStmt->execute([$application['id']]);
+        $directTotal = (float)$totStmt->fetchColumn();
+        $contingency = round($directTotal * 0.05, 2);
+        $grandTotal = $directTotal + $contingency;
+
+        // Persist updated draft state before validating
+        $pdo->prepare('UPDATE `Application` SET grantType = ?, requestedTotal = ?, formData = ?, updatedAt = NOW(3) WHERE id = ?')
+            ->execute([$grantType, $grandTotal, json_encode($formData, JSON_UNESCAPED_UNICODE), $application['id']]);
+
         // Validation checks across all sections
         $errors = [];
         if (empty($formData['agreementAccepted'])) $errors[] = "Section 1: Agreement with IDEAPAD must be accepted.";
@@ -220,18 +297,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isReadOnly) {
             }
         }
 
-        if (count($budgetItems) === 0) {
-            $errors[] = "Section 4: Itemized budget must contain at least one item.";
+        if ($directTotal <= 0) {
+            $errors[] = "Section 4: Itemized budget must contain at least one valid item.";
         }
 
         if (empty($formData['declarationSigned'])) {
-            $errors[] = "Section 8: You must sign the declaration statement before submitting.";
+            $errors[] = "Section 8: You must check the declaration box before submitting.";
         }
 
         if (count($errors) === 0) {
             $sub = $pdo->prepare('UPDATE `Application` SET status = "SUBMITTED", submittedAt = NOW(3), updatedAt = NOW(3) WHERE id = ?');
             $sub->execute([$application['id']]);
-            Auth::audit('SUBMIT_APPLICATION', 'Application', $application['id'], ['total' => $application['requestedTotal'], 'grantType' => $application['grantType']]);
+            Auth::audit('SUBMIT_APPLICATION', 'Application', $application['id'], ['total' => $grandTotal, 'grantType' => $grantType]);
 
             header('Location: /status.php');
             exit;
@@ -240,6 +317,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !$isReadOnly) {
         }
     }
 }
+
+// Refresh application and items state after any POST handling
+$aStmt->execute([$startup['id']]);
+$application = $aStmt->fetch();
+$formData = json_decode($application['formData'], true) ?: [];
+$formData['problemStatement'] = $formData['problemStatement'] ?? $formData['problem'] ?? '';
+$formData['proposedSolution'] = $formData['proposedSolution'] ?? $formData['solution'] ?? '';
+$formData['effortTraction'] = $formData['effortTraction'] ?? $formData['traction'] ?? '';
+$formData['justifications'] = $formData['justifications'] ?? [];
+
+$bStmt->execute([$application['id']]);
+$budgetItems = $bStmt->fetchAll();
+
+$directBudgetTotal = 0.00;
+foreach ($budgetItems as $bItem) {
+    $directBudgetTotal += (float)$bItem['total'];
+}
+$contingencyBudgetTotal = round($directBudgetTotal * 0.05, 2);
+$grandBudgetTotal = $directBudgetTotal + $contingencyBudgetTotal;
+$currentRequestedTotal = (float)$application['requestedTotal'] > 0 ? (float)$application['requestedTotal'] : $grandBudgetTotal;
 
 $pageTitle = "Startup Application Form | IDEAPAD Seed Fund";
 require_once __DIR__ . '/../templates/header.php';
@@ -251,38 +348,37 @@ require_once __DIR__ . '/../templates/header.php';
   <div class="bg-white rounded-2xl p-6 shadow-xs border border-gray-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
     <div>
       <div class="flex items-center gap-2">
-        <span class="text-xs font-bold text-gray-500 uppercase tracking-wider">Application #<?= htmlspecialchars($application['id']) ?></span>
-        <span class="px-2.5 py-0.5 rounded-full text-xs font-extrabold <?= $application['status'] === 'DRAFT' ? 'bg-yellow-100 text-yellow-800' : ($application['status'] === 'SUBMITTED' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800') ?>">
+        <span class="px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider <?= $application['status'] === 'DRAFT' ? 'bg-amber-100 text-amber-800' : ($application['status'] === 'SUBMITTED' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800') ?>">
           <?= htmlspecialchars($application['status']) ?>
         </span>
+        <span class="text-xs text-gray-400 font-mono">ID: <?= htmlspecialchars($application['id']) ?></span>
       </div>
-      <h1 class="text-2xl font-extrabold text-gray-900 mt-1"><?= htmlspecialchars($startup['teamName']) ?></h1>
-      <p class="text-xs text-gray-500">
-        Lead Applicant: <strong><?= htmlspecialchars($startup['teamName']) ?></strong> (<?= htmlspecialchars($startup['enrollmentNo']) ?>, <?= htmlspecialchars($startup['program']) ?>)
-      </p>
+      <h1 class="text-2xl font-black text-gray-900 tracking-tight mt-1">Seed Grant Application (Form A Companion)</h1>
+      <p class="text-xs text-gray-500">Applicant: <strong><?= htmlspecialchars($startup['teamName']) ?></strong> • Target Tier: <strong id="header-grant-tier"><?= htmlspecialchars(Constants::GRANT_TIERS[$application['grantType'] ?? 'PROOF']['name']) ?></strong></p>
     </div>
 
     <div class="flex items-center gap-3">
       <?php if ($isReadOnly): ?>
-        <a href="/reports.php?id=<?= urlencode($application['id']) ?>&type=application" target="_blank" class="px-4 py-2 bg-blue-50 text-blue-700 font-semibold text-xs rounded-xl hover:bg-blue-100 flex items-center gap-1.5 border border-blue-200">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+        <a href="/reports.php?id=<?= urlencode($application['id']) ?>&type=application" target="_blank" class="px-4 py-2 bg-blue-600 text-white font-bold text-xs rounded-xl shadow-xs hover:bg-blue-700 flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           Print Proposal Dossier
         </a>
       <?php else: ?>
         <button type="button" onclick="stepper.saveAndNext(null)" class="px-4 py-2 bg-gray-100 text-gray-700 font-semibold text-xs rounded-xl hover:bg-gray-200 border border-gray-300 flex items-center gap-1.5">
-          Save Draft
+          <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+          Save Current Section
         </button>
       <?php endif; ?>
     </div>
   </div>
 
   <?php if (!empty($submitErrors)): ?>
-    <div class="p-5 rounded-2xl bg-red-50 border border-red-200 text-sm text-red-700 space-y-2">
-      <div class="font-bold flex items-center gap-2 text-red-800">
-        <svg class="w-5 h-5 text-red-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
-        Please complete all required sections before submitting:
+    <div class="p-4 bg-red-50 border border-red-200 rounded-xl space-y-1">
+      <div class="text-xs font-bold text-red-800 uppercase flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        Please complete required fields before final submission:
       </div>
-      <ul class="list-disc pl-5 space-y-1 text-xs">
+      <ul class="list-disc pl-5 text-xs text-red-700 space-y-0.5">
         <?php foreach ($submitErrors as $err): ?>
           <li><?= htmlspecialchars($err) ?></li>
         <?php endforeach; ?>
@@ -290,25 +386,25 @@ require_once __DIR__ . '/../templates/header.php';
     </div>
   <?php endif; ?>
 
-  <!-- 8-Section Horizontal Navigation Stepper -->
-  <div class="bg-white rounded-2xl p-2.5 shadow-xs border border-gray-200 overflow-x-auto scrollbar-none">
-    <div class="flex items-center min-w-max gap-1 text-xs font-semibold">
-      <button type="button" data-step="1" class="stepper-nav-item px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all">
-        <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-[10px] font-bold flex items-center justify-center">1</span>
+  <!-- Policy Stepper Navigation (8 Sections) -->
+  <div class="bg-white rounded-2xl p-3 shadow-xs border border-gray-200 overflow-x-auto">
+    <div class="flex items-center gap-2 min-w-[760px] text-xs font-bold text-gray-500">
+      <button type="button" data-step="1" class="stepper-nav-item active px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all">
+        <span class="w-5 h-5 rounded-full bg-blue-600 text-white text-[10px] font-bold flex items-center justify-center">1</span>
         Agreement
       </button>
       <button type="button" data-step="2" class="stepper-nav-item px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all">
         <span class="w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-[10px] font-bold flex items-center justify-center">2</span>
-        Basic Info
+        Applicant & Grant
       </button>
       <button type="button" data-step="3" class="stepper-nav-item px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all">
         <span class="w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-[10px] font-bold flex items-center justify-center">3</span>
         10 Experiments
-        <span id="experiment-count-badge" class="px-1.5 py-0.2 rounded-full text-[10px] bg-gray-100 text-gray-600">0/10</span>
+        <span id="experiment-count-badge" class="px-1.5 py-0.2 text-[10px] rounded-full bg-gray-200 text-gray-700">0/10</span>
       </button>
       <button type="button" data-step="4" class="stepper-nav-item px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all">
         <span class="w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-[10px] font-bold flex items-center justify-center">4</span>
-        Budget (9 Heads)
+        Annexure 1 Budget
       </button>
       <button type="button" data-step="5" class="stepper-nav-item px-3 py-2 rounded-xl flex items-center gap-1.5 transition-all">
         <span class="w-5 h-5 rounded-full bg-gray-100 text-gray-700 text-[10px] font-bold flex items-center justify-center">5</span>
@@ -331,8 +427,7 @@ require_once __DIR__ . '/../templates/header.php';
 
   <!-- Form Stepper Container -->
   <form id="startup-application-form" method="POST" action="/dashboard.php" class="space-y-6">
-    <input type="hidden" name="action" value="save_draft">
-    <input type="hidden" name="grantType" id="grantTypeInput" value="<?= htmlspecialchars($application['grantType'] ?? 'PROOF') ?>">
+    <input type="hidden" name="action" id="form-action-input" value="save_draft">
 
     <!-- SECTION 1: AGREEMENT WITH IDEAPAD -->
     <div id="step-1" class="form-section bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-200 space-y-6">
@@ -385,7 +480,7 @@ require_once __DIR__ . '/../templates/header.php';
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-gray-50 border border-gray-200 text-xs">
-        <div><span class="text-gray-500">Applicant Name:</span> <strong><?= htmlspecialchars($startup['teamName']) ?></strong></div>
+        <div><span class="text-gray-500">Applicant Name:</span> <strong><?= htmlspecialchars($user['name']) ?></strong></div>
         <div><span class="text-gray-500">Venture Team:</span> <strong><?= htmlspecialchars($startup['teamName']) ?></strong></div>
         <div><span class="text-gray-500">Enrollment No:</span> <strong><?= htmlspecialchars($startup['enrollmentNo']) ?></strong></div>
         <div><span class="text-gray-500">Program & Dept:</span> <strong><?= htmlspecialchars($startup['program']) ?></strong></div>
@@ -395,24 +490,33 @@ require_once __DIR__ . '/../templates/header.php';
 
       <!-- Selected Grant Tier Selection -->
       <div>
-        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Target Grant Type (Policy P2)</label>
-        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <?php foreach (Constants::GRANT_TIERS as $tKey => $tier): if ($tKey === 'EMERGENCY') continue; ?>
-            <label class="cursor-pointer border rounded-xl p-3 flex flex-col justify-between text-xs transition-all <?= ($application['grantType'] ?? 'PROOF') === $tKey ? 'border-blue-600 bg-blue-50/50 ring-2 ring-blue-600' : 'border-gray-200 hover:border-gray-300' ?>">
+        <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-2">Target Grant Type (Policy P2) *</label>
+        <p class="text-[11px] text-gray-500 mb-3">Click on a grant card below to select your requested scheme:</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" id="grant-tier-selector">
+          <?php foreach (Constants::GRANT_TIERS as $tKey => $tier): if ($tKey === 'EMERGENCY') continue; 
+            $isSelected = ($application['grantType'] ?? 'PROOF') === $tKey;
+          ?>
+            <label 
+              class="grant-card cursor-pointer border rounded-xl p-3 flex flex-col justify-between text-xs transition-all <?= $isSelected ? 'border-blue-600 bg-blue-50/70 ring-2 ring-blue-600 shadow-sm' : 'border-gray-200 hover:border-gray-300 bg-white' ?>" 
+              data-grant="<?= $tKey ?>"
+              onclick="updateGrantTierSelection('<?= $tKey ?>')"
+            >
               <div>
+                <div class="flex items-center justify-between">
+                  <span class="font-bold text-gray-900"><?= htmlspecialchars($tier['name']) ?></span>
+                  <span class="grant-check text-blue-600 text-sm font-bold <?= $isSelected ? '' : 'hidden' ?>">✓</span>
+                </div>
                 <input 
                   type="radio" 
-                  name="grantTypeSelect" 
+                  name="grantType" 
                   value="<?= $tKey ?>" 
-                  <?= ($application['grantType'] ?? 'PROOF') === $tKey ? 'checked' : '' ?>
+                  <?= $isSelected ? 'checked' : '' ?>
                   <?= $isReadOnly ? 'disabled' : '' ?>
-                  onchange="document.getElementById('grantTypeInput').value = this.value"
-                  class="sr-only"
+                  class="sr-only grant-radio"
                 />
-                <span class="block font-bold text-gray-900"><?= htmlspecialchars($tier['name']) ?></span>
-                <span class="block text-blue-600 font-extrabold mt-1">₹<?= number_format($tier['min']) ?> – ₹<?= number_format($tier['max']) ?></span>
+                <span class="block text-blue-700 font-extrabold mt-1">₹<?= number_format($tier['min']) ?> – ₹<?= number_format($tier['max']) ?></span>
               </div>
-              <span class="block text-[11px] text-gray-500 mt-2"><?= htmlspecialchars($tier['target_trl']) ?></span>
+              <span class="block text-[11px] text-gray-500 mt-2 leading-relaxed"><?= htmlspecialchars($tier['target_trl']) ?></span>
             </label>
           <?php endforeach; ?>
         </div>
@@ -443,20 +547,20 @@ require_once __DIR__ . '/../templates/header.php';
           rows="3" 
           maxlength="600"
           <?= $isReadOnly ? 'readonly' : '' ?>
-          placeholder="e.g. We are building an edge IoT sensor node that detects anomalies..."
+          placeholder="e.g. Smart wearable sensor array coupled with an automated pneumatic cushion..."
           class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-600 focus:bg-white focus:outline-none"
         ><?= htmlspecialchars($formData['proposedSolution'] ?? '') ?></textarea>
       </div>
 
-      <!-- Effort and Traction -->
+      <!-- Traction So Far -->
       <div>
         <label class="block text-xs font-bold text-gray-700 uppercase tracking-wider mb-1">
-          Effort and traction so far (as short as possible) *
+          Effort & traction so far (as short as possible) *
         </label>
         <textarea 
           name="effortTraction" 
           rows="3" 
-          maxlength="800"
+          maxlength="600"
           <?= $isReadOnly ? 'readonly' : '' ?>
           placeholder="e.g. 1. Interviewed 100 subjects; 2. Built proof of concept breadboard..."
           class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-600 focus:bg-white focus:outline-none"
@@ -480,27 +584,27 @@ require_once __DIR__ . '/../templates/header.php';
         <div class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
           Policy P6.5 Requirement
         </div>
-        <h2 class="text-xl font-bold text-gray-900">3. Experiment Definition (10 Structured Headings)</h2>
-        <p class="text-xs text-gray-500 mt-1">Explain in detail the specific experiment you will conduct to assess your solution and create proof-of-concept (TRL-3 evidence).</p>
+        <h2 class="text-xl font-bold text-gray-900">3. Experiment Plan & Proof of Concept (10 Headings)</h2>
+        <p class="text-xs text-gray-500 mt-1">Formulate the rigorous experiment to assess your solution and create proof of concept with desired outcomes.</p>
       </div>
 
-      <div class="space-y-5">
-        <?php foreach (Constants::EXPERIMENT_HEADINGS as $idx => $exp): ?>
-          <div class="p-4 rounded-xl bg-gray-50/70 border border-gray-200 space-y-2">
+      <div class="space-y-4">
+        <?php foreach (Constants::EXPERIMENT_HEADINGS as $num => $exp): ?>
+          <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-1.5">
             <div class="flex items-center justify-between">
-              <label class="block text-xs font-bold text-gray-900 uppercase tracking-wider">
-                <?= $idx ?>. <?= htmlspecialchars($exp['title']) ?> *
+              <label class="block text-xs font-bold text-gray-800">
+                <?= $num ?>. <?= htmlspecialchars($exp['title']) ?> *
               </label>
-              <span class="text-[11px] text-gray-500 font-normal"><?= htmlspecialchars($exp['prompt']) ?></span>
+              <span class="text-[10px] font-mono text-gray-400">Head <?= $num ?></span>
             </div>
+            <p class="text-[11px] text-gray-500"><?= htmlspecialchars($exp['prompt']) ?></p>
             <textarea 
-              name="exp[<?= $idx ?>]" 
+              name="exp[<?= $num ?>]" 
               rows="2" 
-              maxlength="800"
               <?= $isReadOnly ? 'readonly' : '' ?>
-              placeholder="Provide details for <?= htmlspecialchars($exp['title']) ?>..."
-              class="w-full px-3.5 py-2.5 bg-white border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
-            ><?= htmlspecialchars($formData['experiments'][$idx] ?? '') ?></textarea>
+              placeholder="Enter your detailed response..."
+              class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
+            ><?= htmlspecialchars($formData['experiments'][$num] ?? '') ?></textarea>
           </div>
         <?php endforeach; ?>
       </div>
@@ -511,21 +615,21 @@ require_once __DIR__ . '/../templates/header.php';
           ← Back
         </button>
         <button type="button" onclick="stepper.saveAndNext(this)" class="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-xs">
-          Save & Next: Itemized Budget →
+          Save & Next: Requirement Table →
         </button>
       </div>
     </div>
 
-    <!-- SECTION 4: REQUIREMENT TABLE / BUDGET (ANNEXURE 1) -->
+    <!-- SECTION 4: DETAILED REQUIREMENT TABLE (ANNEXURE 1) -->
     <div id="step-4" class="form-section hidden bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-200 space-y-6">
       <div class="border-b border-gray-200 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div>
           <h2 class="text-xl font-bold text-gray-900">4. Detailed Requirement Table (Annexure 1)</h2>
-          <p class="text-xs text-gray-500 mt-1">Itemized cost breakdown grouped under the 9 major grant headers.</p>
+          <p class="text-xs text-gray-500 mt-1">Itemized cost breakdown grouped under the 9 major grant headers with mandatory 5% contingency.</p>
         </div>
         <div class="text-right">
-          <span class="text-xs text-gray-500 block">Total Requested:</span>
-          <span class="text-xl font-extrabold text-blue-600" id="live-budget-total">₹<?= number_format((float)$application['requestedTotal'], 2) ?></span>
+          <span class="text-[11px] text-gray-500 block">Total Grant Requested:</span>
+          <span class="text-xl font-black text-green-700 font-mono" id="live-budget-total">₹<?= number_format($currentRequestedTotal, 2) ?></span>
         </div>
       </div>
 
@@ -545,7 +649,7 @@ require_once __DIR__ . '/../templates/header.php';
           </thead>
           <tbody id="budget-tbody" class="divide-y divide-gray-200 bg-white">
             <?php foreach ($budgetItems as $bIdx => $item): ?>
-              <tr data-row-idx="<?= $bIdx ?>">
+              <tr data-row-idx="<?= $bIdx ?>" data-justification="<?= htmlspecialchars($item['justification'] ?? '') ?>">
                 <td class="p-2.5">
                   <select name="b_header[]" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-1.5 border rounded-lg text-xs bg-gray-50">
                     <?php foreach (Constants::BUDGET_HEADERS as $hK => $hV): ?>
@@ -576,12 +680,29 @@ require_once __DIR__ . '/../templates/header.php';
               </tr>
             <?php endforeach; ?>
           </tbody>
+          <tfoot class="bg-gray-50 border-t-2 border-gray-300 font-bold text-xs">
+            <tr>
+              <td colspan="5" class="p-2.5 text-right text-gray-600">Direct Expenses Subtotal:</td>
+              <td class="p-2.5 text-right font-mono" id="live-budget-subtotal">₹<?= number_format($directBudgetTotal, 2) ?></td>
+              <?php if (!$isReadOnly): ?><td></td><?php endif; ?>
+            </tr>
+            <tr>
+              <td colspan="5" class="p-2.5 text-right text-gray-600">Mandatory 5% Contingency Buffer:</td>
+              <td class="p-2.5 text-right font-mono text-gray-600" id="live-budget-contingency">₹<?= number_format($contingencyBudgetTotal, 2) ?></td>
+              <?php if (!$isReadOnly): ?><td></td><?php endif; ?>
+            </tr>
+            <tr class="bg-blue-50 text-blue-950 font-black">
+              <td colspan="5" class="p-2.5 text-right text-sm">Grand Total Grant Requested:</td>
+              <td class="p-2.5 text-right font-mono text-sm text-green-700" id="live-budget-grand">₹<?= number_format($grandBudgetTotal, 2) ?></td>
+              <?php if (!$isReadOnly): ?><td></td><?php endif; ?>
+            </tr>
+          </tfoot>
         </table>
       </div>
 
       <?php if (!$isReadOnly): ?>
         <div>
-          <button type="button" onclick="addBudgetRow()" class="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs flex items-center gap-1.5 border border-gray-300">
+          <button type="button" onclick="addBudgetRow()" class="px-4 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-xs flex items-center gap-1.5 border border-gray-300 shadow-xs">
             + Add Line Item
           </button>
         </div>
@@ -606,21 +727,29 @@ require_once __DIR__ . '/../templates/header.php';
       </div>
 
       <div id="justifications-container" class="space-y-4">
-        <?php foreach ($budgetItems as $jIdx => $item): ?>
+        <?php if (empty($budgetItems)): ?>
+          <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+            <strong>No budget items found.</strong> Please click "← Back" and add required line items in Section 4 (Requirement Table) first.
+          </div>
+        <?php else: foreach ($budgetItems as $jIdx => $item): ?>
           <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
-            <div class="flex items-center justify-between text-xs font-bold text-gray-800">
-              <span>Item <?= $jIdx + 1 ?>: <?= htmlspecialchars($item['name']) ?> (<?= htmlspecialchars($item['header']) ?>)</span>
-              <span class="text-blue-600 font-mono">₹<?= number_format((float)$item['total'], 2) ?></span>
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-bold text-gray-800 gap-1">
+              <div class="flex items-center gap-2">
+                <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-[11px] font-mono flex items-center justify-center font-bold"><?= $jIdx + 1 ?></span>
+                <span><?= htmlspecialchars($item['name']) ?> <span class="text-[10px] text-gray-500 font-normal">(<?= htmlspecialchars($item['header']) ?> • <?= htmlspecialchars($item['vendor'] ?? 'Vendor') ?>)</span></span>
+              </div>
+              <span class="text-blue-700 font-mono font-bold">₹<?= number_format((float)$item['total'], 2) ?></span>
             </div>
             <textarea 
               name="justification_item[<?= $item['id'] ?>]" 
+              data-item-index="<?= $jIdx ?>"
               rows="2" 
               <?= $isReadOnly ? 'readonly' : '' ?>
               placeholder="Explain why this item is necessary for the experiment..."
-              class="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-xs"
-            ><?= htmlspecialchars($item['justification'] ?? '') ?></textarea>
+              class="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
+            ><?= htmlspecialchars($item['justification'] ?? ($formData['justifications'][$item['id']] ?? ($formData['justifications'][$jIdx] ?? ''))) ?></textarea>
           </div>
-        <?php endforeach; ?>
+        <?php endforeach; endif; ?>
       </div>
 
       <!-- Navigation -->
@@ -638,75 +767,113 @@ require_once __DIR__ . '/../templates/header.php';
     <div id="step-6" class="form-section hidden bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-200 space-y-6">
       <div class="border-b border-gray-200 pb-4">
         <h2 class="text-xl font-bold text-gray-900">6. Self-Assessment of Project Status</h2>
-        <p class="text-xs text-gray-500 mt-1">Assess your current project readiness on TRL, MRL, and IRL scales (Policy P6.8).</p>
+        <p class="text-xs text-gray-500 mt-1">Self-assess current levels on TRL, MRL, and IRL scales (1–9) and milestone status (P6.8–9).</p>
       </div>
 
-      <!-- 3 Readiness Scales -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+      <!-- 3 Scales (TRL, MRL, IRL) -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
-          <label class="block text-xs font-bold text-blue-700 uppercase tracking-wider">Technology Readiness Level (TRL)</label>
-          <select name="self_trl" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-2.5 border rounded-xl text-xs bg-white">
+          <label class="block text-xs font-bold text-gray-800 uppercase">Technology Readiness (TRL)</label>
+          <select name="self_trl" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-blue-700">
             <?php foreach (Constants::TRL_LEVELS as $lvl => $desc): ?>
-              <option value="<?= $lvl ?>" <?= ($formData['selfAssessment']['trl'] ?? 1) == $lvl ? 'selected' : '' ?>>
-                TRL <?= $lvl ?>: <?= htmlspecialchars($desc) ?>
-              </option>
+              <option value="<?= $lvl ?>" <?= ($formData['selfAssessment']['trl'] ?? 1) === $lvl ? 'selected' : '' ?>>Level <?= $lvl ?>: <?= htmlspecialchars($desc) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
 
         <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
-          <label class="block text-xs font-bold text-purple-700 uppercase tracking-wider">Manufacturing Readiness Level (MRL)</label>
-          <select name="self_mrl" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-2.5 border rounded-xl text-xs bg-white">
+          <label class="block text-xs font-bold text-gray-800 uppercase">Manufacturing Readiness (MRL)</label>
+          <select name="self_mrl" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-purple-700">
             <?php foreach (Constants::MRL_LEVELS as $lvl => $desc): ?>
-              <option value="<?= $lvl ?>" <?= ($formData['selfAssessment']['mrl'] ?? 1) == $lvl ? 'selected' : '' ?>>
-                MRL <?= $lvl ?>: <?= htmlspecialchars($desc) ?>
-              </option>
+              <option value="<?= $lvl ?>" <?= ($formData['selfAssessment']['mrl'] ?? 1) === $lvl ? 'selected' : '' ?>>Level <?= $lvl ?>: <?= htmlspecialchars($desc) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
 
         <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
-          <label class="block text-xs font-bold text-emerald-700 uppercase tracking-wider">Investment Readiness Level (IRL)</label>
-          <select name="self_irl" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-2.5 border rounded-xl text-xs bg-white">
+          <label class="block text-xs font-bold text-gray-800 uppercase">Integration Readiness (IRL)</label>
+          <select name="self_irl" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-2 bg-white border border-gray-300 rounded-lg text-xs font-bold text-emerald-700">
             <?php foreach (Constants::IRL_LEVELS as $lvl => $desc): ?>
-              <option value="<?= $lvl ?>" <?= ($formData['selfAssessment']['irl'] ?? 1) == $lvl ? 'selected' : '' ?>>
-                IRL <?= $lvl ?>: <?= htmlspecialchars($desc) ?>
-              </option>
+              <option value="<?= $lvl ?>" <?= ($formData['selfAssessment']['irl'] ?? 1) === $lvl ? 'selected' : '' ?>>Level <?= $lvl ?>: <?= htmlspecialchars($desc) ?></option>
             <?php endforeach; ?>
           </select>
         </div>
       </div>
 
-      <!-- Milestone Track Self-Assessment -->
-      <div class="pt-4 border-t border-gray-200 space-y-4">
+      <!-- Milestone Track Selector -->
+      <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-3">
         <div class="flex items-center justify-between">
-          <h3 class="text-sm font-bold text-gray-900">Milestone Achievement Self-Assessment (P6.9)</h3>
-          <select name="self_track" id="self-track-select" onchange="toggleMilestoneTrack(this.value)" class="text-xs p-1.5 border rounded-lg bg-gray-50 font-semibold">
-            <option value="PROTOTYPING" <?= ($formData['selfAssessment']['track'] ?? 'PROTOTYPING') === 'PROTOTYPING' ? 'selected' : '' ?>>Track A: Idea Prototyping & PoC</option>
-            <option value="PROFESSIONAL" <?= ($formData['selfAssessment']['track'] ?? '') === 'PROFESSIONAL' ? 'selected' : '' ?>>Track B: Professional & Entrepreneurship</option>
+          <label class="text-xs font-bold text-gray-800 uppercase">Milestones Self-Assessment Track</label>
+          <select name="self_track" id="track-selector" onchange="toggleMilestoneTrack(this.value)" <?= $isReadOnly ? 'disabled' : '' ?> class="p-1.5 bg-white border rounded-lg text-xs font-semibold">
+            <option value="PROTOTYPING" <?= ($formData['selfAssessment']['track'] ?? 'PROTOTYPING') === 'PROTOTYPING' ? 'selected' : '' ?>>Track A: Problem-Solution Fit Startups</option>
+            <option value="PROFESSIONAL" <?= ($formData['selfAssessment']['track'] ?? 'PROTOTYPING') === 'PROFESSIONAL' ? 'selected' : '' ?>>Track B: Entrepreneurial-Fit Startups</option>
           </select>
         </div>
 
-        <div class="space-y-3">
-          <?php foreach (Constants::MILESTONES_TRACK_A as $mIdx => $mName): ?>
-            <div class="p-3.5 rounded-xl bg-gray-50 border border-gray-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-              <span class="font-medium text-gray-800 sm:w-1/2"><?= htmlspecialchars($mName) ?></span>
-              <div class="flex items-center gap-3 sm:w-1/2">
-                <select name="milestones[<?= htmlspecialchars($mName) ?>][status]" <?= $isReadOnly ? 'disabled' : '' ?> class="p-1.5 border rounded-lg bg-white text-xs">
-                  <option value="PENDING" <?= ($formData['selfAssessment']['milestones'][$mName]['status'] ?? '') === 'PENDING' ? 'selected' : '' ?>>Pending</option>
-                  <option value="COMPLETED" <?= ($formData['selfAssessment']['milestones'][$mName]['status'] ?? '') === 'COMPLETED' ? 'selected' : '' ?>>Completed</option>
-                </select>
-                <input 
-                  type="text" 
-                  name="milestones[<?= htmlspecialchars($mName) ?>][remarks]" 
-                  value="<?= htmlspecialchars($formData['selfAssessment']['milestones'][$mName]['remarks'] ?? '') ?>"
-                  <?= $isReadOnly ? 'readonly' : '' ?>
-                  placeholder="Remarks / evidence link..."
-                  class="flex-1 p-1.5 border rounded-lg bg-white text-xs"
-                />
-              </div>
-            </div>
-          <?php endforeach; ?>
+        <!-- Track A Table -->
+        <div id="track-a-container" class="<?= ($formData['selfAssessment']['track'] ?? 'PROTOTYPING') === 'PROTOTYPING' ? '' : 'hidden' ?>">
+          <table class="w-full text-left text-xs border border-gray-200 rounded-lg overflow-hidden">
+            <thead class="bg-gray-100 text-gray-700 font-bold">
+              <tr>
+                <th class="p-2.5">Milestone Checkpoint</th>
+                <th class="p-2.5 text-center w-36">Status</th>
+                <th class="p-2.5">Remarks / Progress Evidence</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 bg-white">
+              <?php foreach (Constants::MILESTONES_TRACK_A as $mName): 
+                $mStatus = $formData['selfAssessment']['milestones'][$mName]['status'] ?? ($formData['selfAssessment']['milestones'][$mName] ?? 'PENDING');
+                $mRemarks = $formData['selfAssessment']['milestones'][$mName]['remarks'] ?? '';
+              ?>
+                <tr>
+                  <td class="p-2.5 font-medium text-gray-800"><?= htmlspecialchars($mName) ?></td>
+                  <td class="p-2.5 text-center">
+                    <select name="milestones[<?= htmlspecialchars($mName) ?>][status]" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-1 border rounded text-xs bg-gray-50">
+                      <option value="PENDING" <?= $mStatus === 'PENDING' ? 'selected' : '' ?>>Pending</option>
+                      <option value="IN_PROGRESS" <?= $mStatus === 'IN_PROGRESS' ? 'selected' : '' ?>>In Progress</option>
+                      <option value="COMPLETED" <?= $mStatus === 'COMPLETED' ? 'selected' : '' ?>>Completed</option>
+                    </select>
+                  </td>
+                  <td class="p-2.5">
+                    <input type="text" name="milestones[<?= htmlspecialchars($mName) ?>][remarks]" value="<?= htmlspecialchars((string)$mRemarks) ?>" <?= $isReadOnly ? 'readonly' : '' ?> placeholder="Short progress notes..." class="w-full p-1 border rounded text-xs">
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Track B Table -->
+        <div id="track-b-container" class="<?= ($formData['selfAssessment']['track'] ?? 'PROTOTYPING') === 'PROFESSIONAL' ? '' : 'hidden' ?>">
+          <table class="w-full text-left text-xs border border-gray-200 rounded-lg overflow-hidden">
+            <thead class="bg-gray-100 text-gray-700 font-bold">
+              <tr>
+                <th class="p-2.5">Milestone Checkpoint</th>
+                <th class="p-2.5 text-center w-36">Status</th>
+                <th class="p-2.5">Remarks / Progress Evidence</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 bg-white">
+              <?php foreach (Constants::MILESTONES_TRACK_B as $mName): 
+                $mStatus = $formData['selfAssessment']['milestones'][$mName]['status'] ?? ($formData['selfAssessment']['milestones'][$mName] ?? 'PENDING');
+                $mRemarks = $formData['selfAssessment']['milestones'][$mName]['remarks'] ?? '';
+              ?>
+                <tr>
+                  <td class="p-2.5 font-medium text-gray-800"><?= htmlspecialchars($mName) ?></td>
+                  <td class="p-2.5 text-center">
+                    <select name="milestones[<?= htmlspecialchars($mName) ?>][status]" <?= $isReadOnly ? 'disabled' : '' ?> class="w-full p-1 border rounded text-xs bg-gray-50">
+                      <option value="PENDING" <?= $mStatus === 'PENDING' ? 'selected' : '' ?>>Pending</option>
+                      <option value="IN_PROGRESS" <?= $mStatus === 'IN_PROGRESS' ? 'selected' : '' ?>>In Progress</option>
+                      <option value="COMPLETED" <?= $mStatus === 'COMPLETED' ? 'selected' : '' ?>>Completed</option>
+                    </select>
+                  </td>
+                  <td class="p-2.5">
+                    <input type="text" name="milestones[<?= htmlspecialchars($mName) ?>][remarks]" value="<?= htmlspecialchars((string)$mRemarks) ?>" <?= $isReadOnly ? 'readonly' : '' ?> placeholder="Short progress notes..." class="w-full p-1 border rounded text-xs">
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
         </div>
       </div>
 
@@ -721,89 +888,87 @@ require_once __DIR__ . '/../templates/header.php';
       </div>
     </div>
 
-    <!-- SECTION 7: DOCUMENTS & 100-150KB IMAGE COMPRESSOR -->
+    <!-- SECTION 7: DOCUMENTS & 100-150KB COMPRESSION -->
     <div id="step-7" class="form-section hidden bg-white rounded-2xl p-6 sm:p-8 shadow-xs border border-gray-200 space-y-6">
       <div class="border-b border-gray-200 pb-4">
         <div class="inline-flex items-center gap-1.5 text-xs font-bold text-blue-600 uppercase tracking-wider mb-1">
-          Policy P5.1 Verification
+          Policy P5.1 Document Compliance
         </div>
-        <h2 class="text-xl font-bold text-gray-900">7. Mandatory Supporting Documents</h2>
-        <p class="text-xs text-gray-500 mt-1">Aadhaar card, PAN card, and passport photos are automatically compressed client-side to <strong>100 KB – 150 KB</strong> before upload.</p>
+        <h2 class="text-xl font-bold text-gray-900">7. Mandatory Documents (Compressed to 100–150 KB)</h2>
+        <p class="text-xs text-gray-500 mt-1">Identity documents are automatically compressed on your device to 100–150 KB before transmission.</p>
       </div>
 
-      <!-- Document Upload Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
-        
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <!-- Aadhaar Card -->
-        <div class="p-5 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
+        <div class="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-gray-900">Aadhaar Card *</span>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">100–150 KB</span>
+            <span class="text-xs font-bold text-gray-800">Aadhaar Card (Team Members)</span>
+            <?php if (isset($docsByType['AADHAAR'])): ?>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">Uploaded ✓</span>
+            <?php endif; ?>
           </div>
-          <p class="text-[11px] text-gray-500">Government ID for identity verification.</p>
           <?php if (!$isReadOnly): ?>
-            <input type="file" accept="image/*" onchange="handleCompressAndUpload(this, 'AADHAAR')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-            <div id="preview-AADHAAR" class="text-[11px] text-gray-600 space-y-1"></div>
+            <input type="file" accept="image/*" onchange="handleCompressAndUpload(this, 'AADHAAR')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
           <?php endif; ?>
+          <div id="preview-AADHAAR" class="text-[11px] text-gray-500">
+            <?php if (isset($docsByType['AADHAAR'])): ?>
+              <a href="/uploads/<?= htmlspecialchars($docsByType['AADHAAR']['path']) ?>" target="_blank" class="text-blue-600 underline font-semibold">View uploaded Aadhaar file</a>
+            <?php endif; ?>
+          </div>
         </div>
 
         <!-- PAN Card -->
-        <div class="p-5 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
+        <div class="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-gray-900">PAN Card *</span>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">100–150 KB</span>
+            <span class="text-xs font-bold text-gray-800">PAN Card</span>
+            <?php if (isset($docsByType['PAN'])): ?>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">Uploaded ✓</span>
+            <?php endif; ?>
           </div>
-          <p class="text-[11px] text-gray-500">Permanent Account Number card of team leader.</p>
           <?php if (!$isReadOnly): ?>
-            <input type="file" accept="image/*" onchange="handleCompressAndUpload(this, 'PAN')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-            <div id="preview-PAN" class="text-[11px] text-gray-600 space-y-1"></div>
+            <input type="file" accept="image/*" onchange="handleCompressAndUpload(this, 'PAN')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
           <?php endif; ?>
+          <div id="preview-PAN" class="text-[11px] text-gray-500">
+            <?php if (isset($docsByType['PAN'])): ?>
+              <a href="/uploads/<?= htmlspecialchars($docsByType['PAN']['path']) ?>" target="_blank" class="text-blue-600 underline font-semibold">View uploaded PAN file</a>
+            <?php endif; ?>
+          </div>
         </div>
 
         <!-- Passport Photo -->
-        <div class="p-5 rounded-2xl bg-gray-50 border border-gray-200 space-y-3">
+        <div class="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
           <div class="flex items-center justify-between">
-            <span class="text-xs font-bold text-gray-900">Passport Photo *</span>
-            <span class="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 font-bold">100–150 KB</span>
+            <span class="text-xs font-bold text-gray-800">Passport-Size Photo</span>
+            <?php if (isset($docsByType['PHOTO'])): ?>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">Uploaded ✓</span>
+            <?php endif; ?>
           </div>
-          <p class="text-[11px] text-gray-500">Recent formal passport-size photo of founder.</p>
           <?php if (!$isReadOnly): ?>
-            <input type="file" accept="image/*" onchange="handleCompressAndUpload(this, 'PHOTO')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
-            <div id="preview-PHOTO" class="text-[11px] text-gray-600 space-y-1"></div>
+            <input type="file" accept="image/*" onchange="handleCompressAndUpload(this, 'PHOTO')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
           <?php endif; ?>
+          <div id="preview-PHOTO" class="text-[11px] text-gray-500">
+            <?php if (isset($docsByType['PHOTO'])): ?>
+              <a href="/uploads/<?= htmlspecialchars($docsByType['PHOTO']['path']) ?>" target="_blank" class="text-blue-600 underline font-semibold">View uploaded photo</a>
+            <?php endif; ?>
+          </div>
         </div>
-      </div>
 
-      <!-- Uploaded Documents Table -->
-      <div class="pt-4 border-t border-gray-200 space-y-3">
-        <h4 class="text-xs font-bold text-gray-900 uppercase tracking-wider">Uploaded Documents Ledger</h4>
-        <div class="overflow-x-auto border border-gray-200 rounded-xl">
-          <table class="w-full text-left text-xs">
-            <thead class="bg-gray-50 text-gray-700 font-bold uppercase text-[10px]">
-              <tr>
-                <th class="p-3">Type</th>
-                <th class="p-3">Filename / Label</th>
-                <th class="p-3">Upload Date</th>
-                <?php if (!$isReadOnly): ?><th class="p-3 text-center">Action</th><?php endif; ?>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200 bg-white" id="uploaded-docs-tbody">
-              <?php if (empty($documents)): ?>
-                <tr><td colspan="4" class="p-4 text-center text-gray-400">No documents uploaded yet.</td></tr>
-              <?php else: foreach ($documents as $doc): ?>
-                <tr>
-                  <td class="p-3 font-bold text-blue-700"><?= htmlspecialchars($doc['type']) ?></td>
-                  <td class="p-3 text-gray-900"><?= htmlspecialchars($doc['memberLabel'] ?? $doc['path']) ?></td>
-                  <td class="p-3 text-gray-500"><?= htmlspecialchars(substr($doc['createdAt'], 0, 10)) ?></td>
-                  <?php if (!$isReadOnly): ?>
-                    <td class="p-3 text-center">
-                      <button type="button" onclick="deleteDocument('<?= $doc['id'] ?>')" class="text-red-600 hover:underline font-bold">Remove</button>
-                    </td>
-                  <?php endif; ?>
-                </tr>
-              <?php endforeach; endif; ?>
-            </tbody>
-          </table>
+        <!-- Pitch Deck -->
+        <div class="p-4 rounded-xl border border-gray-200 bg-gray-50 space-y-2">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-gray-800">Pitch Deck (PDF, max 10MB)</span>
+            <?php if (isset($docsByType['DECK'])): ?>
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold bg-green-100 text-green-800">Uploaded ✓</span>
+            <?php endif; ?>
+          </div>
+          <?php if (!$isReadOnly): ?>
+            <input type="file" accept=".pdf" onchange="handleCompressAndUpload(this, 'DECK')" class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+          <?php endif; ?>
+          <div id="preview-DECK" class="text-[11px] text-gray-500">
+            <?php if (isset($docsByType['DECK'])): ?>
+              <a href="/uploads/<?= htmlspecialchars($docsByType['DECK']['path']) ?>" target="_blank" class="text-blue-600 underline font-semibold">View pitch deck PDF</a>
+            <?php endif; ?>
+          </div>
         </div>
       </div>
 
@@ -813,7 +978,7 @@ require_once __DIR__ . '/../templates/header.php';
           ← Back
         </button>
         <button type="button" onclick="stepper.saveAndNext(this)" class="px-5 py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs hover:bg-blue-700 shadow-xs">
-          Save & Next: Declaration & Submit →
+          Save & Next: Declaration →
         </button>
       </div>
     </div>
@@ -826,22 +991,30 @@ require_once __DIR__ . '/../templates/header.php';
       </div>
 
       <!-- Application Summary Card -->
-      <div class="p-5 rounded-2xl bg-gray-50 border border-gray-200 text-xs space-y-2">
+      <div class="p-5 rounded-2xl bg-gray-50 border border-gray-200 text-xs space-y-2.5">
         <div class="flex items-center justify-between">
-          <span class="text-gray-500">Venture:</span>
+          <span class="text-gray-500">Startup Venture:</span>
           <span class="font-bold text-gray-900"><?= htmlspecialchars($startup['teamName']) ?></span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-gray-500">Target Grant:</span>
-          <span class="font-bold text-blue-700"><?= htmlspecialchars(Constants::GRANT_TIERS[$application['grantType'] ?? 'PROOF']['name']) ?></span>
+          <span class="text-gray-500">Target Grant Scheme:</span>
+          <span class="font-bold text-blue-700" id="summary-grant-tier"><?= htmlspecialchars(Constants::GRANT_TIERS[$application['grantType'] ?? 'PROOF']['name']) ?></span>
+        </div>
+        <div class="flex items-center justify-between border-t pt-2">
+          <span class="text-gray-500">Direct Prototyping Expenses:</span>
+          <span class="font-mono font-semibold text-gray-800" id="summary-direct-total">₹<?= number_format($directBudgetTotal, 2) ?></span>
         </div>
         <div class="flex items-center justify-between">
-          <span class="text-gray-500">Total Requested:</span>
-          <span class="font-bold text-green-700 text-sm">₹<?= number_format((float)$application['requestedTotal'], 2) ?></span>
+          <span class="text-gray-500">Mandatory 5% Contingency Buffer:</span>
+          <span class="font-mono text-gray-600" id="summary-contingency">₹<?= number_format($contingencyBudgetTotal, 2) ?></span>
         </div>
-        <div class="flex items-center justify-between">
-          <span class="text-gray-500">Itemized Items:</span>
-          <span class="font-bold text-gray-800"><?= count($budgetItems) ?> items</span>
+        <div class="flex items-center justify-between border-t pt-2 bg-blue-50/50 -mx-5 px-5 py-2 rounded-b-xl">
+          <span class="font-bold text-gray-900">Total Grant Requested:</span>
+          <span class="font-black text-green-700 text-base font-mono" id="summary-total-requested">₹<?= number_format($currentRequestedTotal, 2) ?></span>
+        </div>
+        <div class="flex items-center justify-between pt-1">
+          <span class="text-gray-500">Itemized Budget Breakdown:</span>
+          <span class="font-semibold text-gray-700" id="summary-items-count"><?= count($budgetItems) ?> items</span>
         </div>
       </div>
 
@@ -857,14 +1030,14 @@ require_once __DIR__ . '/../templates/header.php';
             <?= $isReadOnly ? 'disabled' : '' ?>
             class="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
           />
-          <label for="declarationSigned" class="text-xs text-gray-900 font-bold leading-relaxed">
+          <label for="declarationSigned" class="text-xs text-gray-900 font-bold leading-relaxed cursor-pointer">
             "<?= Constants::DECLARATION_TEXT ?>"
           </label>
         </div>
 
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-blue-200/80 text-xs text-gray-700">
           <div>
-            <span>Digital Signature:</span> <strong><?= htmlspecialchars($startup['teamName']) ?></strong>
+            <span>Digital Signature:</span> <strong><?= htmlspecialchars($startup['teamName']) ?> (<?= htmlspecialchars($user['name']) ?>)</strong>
           </div>
           <div>
             <span>Date:</span> <strong><?= htmlspecialchars($formData['declarationDate'] ?: date('Y-m-d')) ?></strong>
@@ -880,13 +1053,17 @@ require_once __DIR__ . '/../templates/header.php';
         <?php if (!$isReadOnly): ?>
           <button 
             type="submit" 
-            onclick="document.querySelector('input[name=action]').value = 'final_submit'"
-            class="px-6 py-3 rounded-xl bg-green-600 text-white font-extrabold text-sm hover:bg-green-700 shadow-md transition-all"
+            onclick="document.getElementById('form-action-input').value = 'final_submit'"
+            class="px-6 py-3 rounded-xl bg-green-600 text-white font-extrabold text-sm hover:bg-green-700 shadow-md transition-all flex items-center gap-2"
           >
-            Submit Application & Lock Form ✓
+            <span>Submit Application & Lock Form</span>
+            <span class="font-mono text-xs opacity-90">✓</span>
           </button>
         <?php else: ?>
-          <span class="text-xs font-bold text-blue-700">Application Locked (Under Evaluation)</span>
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-blue-600 animate-pulse"></span>
+            <span class="text-xs font-bold text-blue-700">Application Locked (Under SEC Evaluation)</span>
+          </div>
         <?php endif; ?>
       </div>
     </div>
@@ -899,11 +1076,18 @@ require_once __DIR__ . '/../templates/header.php';
 <script src="/js/image-compressor.js"></script>
 <script src="/js/save-next.js"></script>
 <script>
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
 const stepper = new FormStepper({
   formId: 'startup-application-form',
   saveEndpoint: '/dashboard.php',
   onSectionChange: function (step) {
     history.replaceState(null, '', '#step-' + step);
+    if (step === 5) syncJustifications();
+    if (step === 8) updateDeclarationSummary();
   }
 });
 
@@ -917,7 +1101,44 @@ if (currentHash && currentHash.startsWith('#step-')) {
 }
 
 // -------------------------------------------------------------
-// Dynamic Budget Table Serialization & Calculations
+// Interactive Target Grant Type Selection (Issue 1 Fix)
+// -------------------------------------------------------------
+function updateGrantTierSelection(selectedTier) {
+  document.querySelectorAll('.grant-card').forEach(card => {
+    const isSelected = card.getAttribute('data-grant') === selectedTier;
+    const radio = card.querySelector('input[type="radio"]');
+    const check = card.querySelector('.grant-check');
+
+    if (isSelected) {
+      card.classList.add('border-blue-600', 'bg-blue-50/70', 'ring-2', 'ring-blue-600', 'shadow-sm');
+      card.classList.remove('border-gray-200', 'hover:border-gray-300', 'bg-white');
+      if (radio) radio.checked = true;
+      if (check) check.classList.remove('hidden');
+    } else {
+      card.classList.remove('border-blue-600', 'bg-blue-50/70', 'ring-2', 'ring-blue-600', 'shadow-sm');
+      card.classList.add('border-gray-200', 'hover:border-gray-300', 'bg-white');
+      if (radio) radio.checked = false;
+      if (check) check.classList.add('hidden');
+    }
+  });
+
+  const tierNames = {
+    'IDEATION': 'Ideation reward (₹1,000 – ₹5,000)',
+    'VALIDATION': 'Validation Grant (₹5,000 – ₹20,000)',
+    'PROOF': 'Proof Grant (₹25,000 – ₹50,000)',
+    'SCALING': 'Scaling Grant (₹50,000 – ₹5,00,000)'
+  };
+  const displayName = tierNames[selectedTier] || selectedTier;
+
+  const headerBadge = document.getElementById('header-grant-tier');
+  if (headerBadge) headerBadge.innerText = displayName;
+
+  const summaryBadge = document.getElementById('summary-grant-tier');
+  if (summaryBadge) summaryBadge.innerText = displayName;
+}
+
+// -------------------------------------------------------------
+// Dynamic Budget Table Serialization & Calculations (Issue 3 Fix)
 // -------------------------------------------------------------
 function addBudgetRow() {
   const tbody = document.getElementById('budget-tbody');
@@ -934,7 +1155,7 @@ function addBudgetRow() {
       <input type="text" name="b_name[]" class="w-full p-1.5 border rounded-lg text-xs" placeholder="Item name & specs" required>
     </td>
     <td class="p-2.5">
-      <input type="text" name="b_vendor[]" class="w-full p-1.5 border rounded-lg text-xs" placeholder="Vendor / Source">
+      <input type="text" name="b_vendor[]" class="w-full p-1.5 border rounded-lg text-xs" placeholder="Amazon, Robu.in, etc.">
     </td>
     <td class="p-2.5 text-right">
       <input type="number" step="0.01" name="b_unitCost[]" value="0" class="w-24 p-1.5 border rounded-lg text-xs text-right font-mono budget-calc" required>
@@ -942,18 +1163,22 @@ function addBudgetRow() {
     <td class="p-2.5 text-center">
       <input type="number" name="b_qty[]" value="1" class="w-16 p-1.5 border rounded-lg text-xs text-center font-mono budget-calc" min="1" required>
     </td>
-    <td class="p-2.5 text-right font-mono font-bold text-gray-900 row-total">₹0.00</td>
+    <td class="p-2.5 text-right font-mono font-bold text-gray-900 row-total">
+      ₹0.00
+    </td>
     <td class="p-2.5 text-center">
       <button type="button" onclick="removeBudgetRow(this)" class="text-red-500 hover:text-red-700 font-bold">✕</button>
     </td>
   `;
   tbody.appendChild(tr);
   recalculateBudget();
+  syncJustifications();
 }
 
 function removeBudgetRow(btn) {
   btn.closest('tr').remove();
   recalculateBudget();
+  syncJustifications();
 }
 
 document.addEventListener('input', function(e) {
@@ -963,40 +1188,158 @@ document.addEventListener('input', function(e) {
 });
 
 function recalculateBudget() {
-  let grandTotal = 0;
+  let subtotal = 0;
+  let count = 0;
   document.querySelectorAll('#budget-tbody tr').forEach(tr => {
     const uCost = parseFloat(tr.querySelector('input[name="b_unitCost[]"]')?.value || '0');
     const qty = parseInt(tr.querySelector('input[name="b_qty[]"]')?.value || '1');
     const tot = uCost * qty;
-    grandTotal += tot;
+    subtotal += tot;
+    count++;
     const totCell = tr.querySelector('.row-total');
     if (totCell) totCell.innerText = '₹' + tot.toLocaleString('en-IN', { minimumFractionDigits: 2 });
   });
-  document.getElementById('live-budget-total').innerText = '₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const contingency = Math.round(subtotal * 0.05 * 100) / 100;
+  const grandTotal = subtotal + contingency;
+
+  const subtotalEl = document.getElementById('live-budget-subtotal');
+  if (subtotalEl) subtotalEl.innerText = '₹' + subtotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const contingencyEl = document.getElementById('live-budget-contingency');
+  if (contingencyEl) contingencyEl.innerText = '₹' + contingency.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const liveTotalEl = document.getElementById('live-budget-total');
+  if (liveTotalEl) liveTotalEl.innerText = '₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const grandEl = document.getElementById('live-budget-grand');
+  if (grandEl) grandEl.innerText = '₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  updateDeclarationSummary(grandTotal, subtotal, contingency, count);
 }
 
-function serializeAndSaveBudget(btn) {
-  const items = [];
-  document.querySelectorAll('#budget-tbody tr').forEach(tr => {
-    items.push({
-      header: tr.querySelector('select[name="b_header[]"]')?.value,
-      name: tr.querySelector('input[name="b_name[]"]')?.value,
-      vendor: tr.querySelector('input[name="b_vendor[]"]')?.value,
-      unitCost: parseFloat(tr.querySelector('input[name="b_unitCost[]"]')?.value || '0'),
-      qty: parseInt(tr.querySelector('input[name="b_qty[]"]')?.value || '1')
-    });
+// -------------------------------------------------------------
+// Synchronize Justifications (Issue 2 Fix)
+// -------------------------------------------------------------
+function syncJustifications() {
+  const container = document.getElementById('justifications-container');
+  if (!container) return;
+
+  const rows = document.querySelectorAll('#budget-tbody tr');
+  if (rows.length === 0) {
+    container.innerHTML = `
+      <div class="p-4 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-xs">
+        <strong>No budget items found.</strong> Please click "← Back" and add required line items in Section 4 (Requirement Table) first.
+      </div>
+    `;
+    return;
+  }
+
+  // Preserve any justifications already typed
+  const existingValues = {};
+  container.querySelectorAll('textarea').forEach(ta => {
+    const idx = ta.getAttribute('data-item-index');
+    if (idx !== null) existingValues[idx] = ta.value;
   });
 
-  let hiddenInput = document.getElementById('budget_items_json');
-  if (!hiddenInput) {
-    hiddenInput = document.createElement('input');
-    hiddenInput.type = 'hidden';
-    hiddenInput.name = 'budget_items_json';
-    hiddenInput.id = 'budget_items_json';
-    document.getElementById('startup-application-form').appendChild(hiddenInput);
-  }
-  hiddenInput.value = JSON.stringify(items);
+  let html = '';
+  rows.forEach((tr, idx) => {
+    const headerSel = tr.querySelector('select[name="b_header[]"]');
+    const headerText = headerSel ? (headerSel.options[headerSel.selectedIndex]?.text || headerSel.value) : 'Consumables';
+    const name = tr.querySelector('input[name="b_name[]"]')?.value || `Item ${idx + 1}`;
+    const vendor = tr.querySelector('input[name="b_vendor[]"]')?.value || 'Vendor not specified';
+    const uCost = parseFloat(tr.querySelector('input[name="b_unitCost[]"]')?.value || '0');
+    const qty = parseInt(tr.querySelector('input[name="b_qty[]"]')?.value || '1');
+    const total = uCost * qty;
+    const existingJust = existingValues[idx] || tr.getAttribute('data-justification') || '';
 
+    html += `
+      <div class="p-4 rounded-xl bg-gray-50 border border-gray-200 space-y-2">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between text-xs font-bold text-gray-800 gap-1">
+          <div class="flex items-center gap-2">
+            <span class="w-6 h-6 rounded-full bg-blue-100 text-blue-800 text-[11px] font-mono flex items-center justify-center font-bold">${idx + 1}</span>
+            <span>${escapeHtml(name)} <span class="text-[10px] text-gray-500 font-normal">(${escapeHtml(headerText)} • ${escapeHtml(vendor)})</span></span>
+          </div>
+          <span class="text-blue-700 font-mono font-bold">₹${total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+        </div>
+        <textarea 
+          name="justification_item[${idx}]" 
+          data-item-index="${idx}"
+          rows="2" 
+          placeholder="Explain why this ${escapeHtml(name)} is necessary for the experiment..."
+          class="w-full p-2.5 bg-white border border-gray-300 rounded-lg text-xs focus:ring-2 focus:ring-blue-600 focus:outline-none"
+        >${escapeHtml(existingJust)}</textarea>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+}
+
+// -------------------------------------------------------------
+// Update Declaration Summary Card (Issue 3 Fix)
+// -------------------------------------------------------------
+function updateDeclarationSummary(grandTotal, directTotal, contingency, count) {
+  if (grandTotal === undefined) {
+    let sub = 0;
+    let cnt = 0;
+    document.querySelectorAll('#budget-tbody tr').forEach(tr => {
+      const uCost = parseFloat(tr.querySelector('input[name="b_unitCost[]"]')?.value || '0');
+      const qty = parseInt(tr.querySelector('input[name="b_qty[]"]')?.value || '1');
+      sub += (uCost * qty);
+      cnt++;
+    });
+    directTotal = sub;
+    contingency = Math.round(sub * 0.05 * 100) / 100;
+    grandTotal = directTotal + contingency;
+    count = cnt;
+  }
+
+  const reqEl = document.getElementById('summary-total-requested');
+  if (reqEl) reqEl.innerText = '₹' + grandTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const dirEl = document.getElementById('summary-direct-total');
+  if (dirEl) dirEl.innerText = '₹' + directTotal.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const contEl = document.getElementById('summary-contingency');
+  if (contEl) contEl.innerText = '₹' + contingency.toLocaleString('en-IN', { minimumFractionDigits: 2 });
+
+  const cntEl = document.getElementById('summary-items-count');
+  if (cntEl) cntEl.innerText = count + ' items';
+}
+
+// Pre-save hook called by FormStepper
+window.prepareSectionDataForSave = function(step) {
+  if (step === 4) {
+    const items = [];
+    document.querySelectorAll('#budget-tbody tr').forEach(tr => {
+      items.push({
+        header: tr.querySelector('select[name="b_header[]"]')?.value,
+        name: tr.querySelector('input[name="b_name[]"]')?.value,
+        vendor: tr.querySelector('input[name="b_vendor[]"]')?.value,
+        unitCost: parseFloat(tr.querySelector('input[name="b_unitCost[]"]')?.value || '0'),
+        qty: parseInt(tr.querySelector('input[name="b_qty[]"]')?.value || '1'),
+        justification: tr.getAttribute('data-justification') || ''
+      });
+    });
+
+    let hiddenInput = document.getElementById('budget_items_json');
+    if (!hiddenInput) {
+      hiddenInput = document.createElement('input');
+      hiddenInput.type = 'hidden';
+      hiddenInput.name = 'budget_items_json';
+      hiddenInput.id = 'budget_items_json';
+      document.getElementById('startup-application-form').appendChild(hiddenInput);
+    }
+    hiddenInput.value = JSON.stringify(items);
+  }
+};
+
+window.syncJustifications = syncJustifications;
+window.updateDeclarationSummary = updateDeclarationSummary;
+
+function serializeAndSaveBudget(btn) {
+  window.prepareSectionDataForSave(4);
   stepper.saveAndNext(btn);
 }
 
@@ -1042,20 +1385,6 @@ async function handleCompressAndUpload(inputEl, docType) {
   } catch (err) {
     previewDiv.innerHTML = `<span class="text-red-600 font-bold">Error: ${err.message}</span>`;
   }
-}
-
-async function deleteDocument(docId) {
-  if (!confirm('Are you sure you want to remove this document?')) return;
-  const fd = new FormData();
-  fd.append('action', 'delete_document');
-  fd.append('docId', docId);
-
-  await fetch('/dashboard.php', {
-    method: 'POST',
-    headers: { 'X-Requested-With': 'XMLHttpRequest' },
-    body: fd
-  });
-  location.reload();
 }
 </script>
 

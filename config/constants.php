@@ -338,6 +338,10 @@ class Constants {
     ];
 }
 
+if (!defined('ROLE_STARTUP')) define('ROLE_STARTUP', 'STARTUP');
+if (!defined('ROLE_SEC')) define('ROLE_SEC', 'SEC_MEMBER');
+if (!defined('ROLE_ADMIN')) define('ROLE_ADMIN', 'ADMIN');
+
 if (!class_exists('Constants', false)) {
     class_alias(Constants::class, 'Constants');
 }

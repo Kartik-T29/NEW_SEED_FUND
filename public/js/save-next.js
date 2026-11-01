@@ -92,18 +92,31 @@ class FormStepper {
     }
 
     try {
+      // Pre-save hooks for dynamic sections
+      if (typeof window.prepareSectionDataForSave === 'function') {
+        window.prepareSectionDataForSave(this.currentSection);
+      }
+
       if (this.saveEndpoint) {
         const formData = new FormData(this.formEl);
         formData.append('partial_step', this.currentSection.toString());
 
         const res = await fetch(this.saveEndpoint, {
           method: 'POST',
+          headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': 'application/json'
+          },
           body: formData
         });
 
-        const data = await res.json();
-        if (!data.success) {
-          throw new Error(data.error || 'Failed to save section.');
+        const contentType = res.headers.get('content-type') || '';
+        let data = {};
+        if (contentType.includes('application/json')) {
+          data = await res.json();
+          if (!data.success) {
+            throw new Error(data.error || 'Failed to save section.');
+          }
         }
       }
 
@@ -111,9 +124,19 @@ class FormStepper {
       this.showToast('Section saved successfully.', 'success');
 
       if (this.currentSection < this.totalSections) {
-        this.showSection(this.currentSection + 1);
+        const nextStep = this.currentSection + 1;
+        this.showSection(nextStep);
+
+        // Post-transition hooks
+        if (nextStep === 5 && typeof window.syncJustifications === 'function') {
+          window.syncJustifications();
+        }
+        if (nextStep === 8 && typeof window.updateDeclarationSummary === 'function') {
+          window.updateDeclarationSummary();
+        }
       }
     } catch (err) {
+      console.error('[Save Error]', err);
       this.showToast(err.message || 'Error saving changes. Please check your network.', 'error');
     } finally {
       if (buttonEl) {
