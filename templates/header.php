@@ -15,7 +15,7 @@ $currentPage = basename($_SERVER['PHP_SELF'] ?? 'index.php');
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title><?= htmlspecialchars($pageTitle ?? 'IDEAPAD Seed Fund Portal | ITM University') ?></title>
+  <title><?= htmlspecialchars($pageTitle ?? 'IDEAPAD Seed Fund Portal | ITM Gwalior') ?></title>
   
   <!-- Favicon -->
   <link rel="icon" type="image/png" href="/brand/ideapad-logo.png">
@@ -53,17 +53,17 @@ $currentPage = basename($_SERVER['PHP_SELF'] ?? 'index.php');
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <div class="flex items-center justify-between h-16">
         
-        <!-- Brand Logo & University Title -->
+        <!-- Brand Logo & Institutional Title -->
         <div class="flex items-center gap-3">
           <a href="/index.php" class="flex items-center gap-3 group">
             <img 
               src="/brand/ideapad-logo.png" 
-              alt="IDEAPAD - Technology Business Incubator, ITM University" 
+              alt="IDEAPAD - Technology Business Incubator, ITM Gwalior" 
               class="h-9 w-auto object-contain transition-transform group-hover:scale-105"
             />
             <div class="hidden sm:block border-l border-gray-300 pl-3">
               <span class="block text-xs font-bold text-gray-900 tracking-tight uppercase">Seed Fund Portal</span>
-              <span class="block text-[10px] text-gray-500 font-medium">ITM University Gwalior</span>
+              <span class="block text-[10px] text-gray-500 font-medium">ITM Gwalior</span>
             </div>
           </a>
         </div>

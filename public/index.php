@@ -7,7 +7,7 @@ require_once __DIR__ . '/../config/auth.php';
 use App\Config\Constants;
 use App\Config\Auth;
 
-$pageTitle = "IDEAPAD Seed Fund Portal | ITM University Gwalior";
+$pageTitle = "IDEAPAD Seed Fund Portal | ITM Gwalior";
 require_once __DIR__ . '/../templates/header.php';
 ?>
 
@@ -17,13 +17,13 @@ require_once __DIR__ . '/../templates/header.php';
     <!-- Hero Section -->
     <div class="text-center max-w-3xl mx-auto space-y-5">
       <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-bold tracking-wide uppercase">
-        ITM University Innovation Fund
+        ITM Gwalior Innovation Fund
       </div>
       <h1 class="text-4xl sm:text-5xl font-extrabold text-gray-900 tracking-tight leading-tight">
         Seed Grant Support for Student & Faculty Startups
       </h1>
       <p class="text-base sm:text-lg text-gray-600 leading-relaxed">
-        IDEAPAD (Technology Business Incubator of ITM University) provides structured non-dilutive seed funding to accelerate innovative ideas from concept to proof-of-concept (TRL 3) and investment readiness.
+        IDEAPAD (Technology Business Incubator of ITM Gwalior) provides structured non-dilutive seed funding to accelerate innovative ideas from concept to proof-of-concept (TRL 3) and investment readiness.
       </p>
       
       <div class="pt-4 flex flex-wrap items-center justify-center gap-4">
@@ -110,7 +110,7 @@ require_once __DIR__ . '/../templates/header.php';
         Governance & Disbursement Protocols (Policy P10 & P11)
       </h4>
       <p class="leading-relaxed">
-        Sanctioned seed funds are disbursed directly to verified vendors or issued via institutional managed cards for approved consumable prototyping. All capital equipment and prototypes remain property of ITM University. Maximum of 3 grants per team unless waived by the SEC. Half-yearly audit reports are published by IDEAPAD.
+        Sanctioned seed funds are disbursed directly to verified vendors or issued via institutional managed cards for approved consumable prototyping. All capital equipment and prototypes remain property of ITM Gwalior. Maximum of 3 grants per team unless waived by the SEC. Half-yearly audit reports are published by IDEAPAD.
       </p>
     </div>
 

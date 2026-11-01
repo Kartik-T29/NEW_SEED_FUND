@@ -225,7 +225,7 @@ class PortalTestSuite {
                 '1' => 'Validate stabilization under 30 km/h wind gusts in wind tunnel',
                 '2' => 'Excessive image blur during cross-wind spray passes',
                 '3' => 'Sub-pixel optical flow stability exceeding 95% accuracy',
-                '4' => 'Test 5-point wind angles in controlled university wind tunnel',
+                '4' => 'Test 5-point wind angles in controlled ITM Gwalior wind tunnel',
                 '5' => 'Custom carbon fiber gimbal, IMU 9-DOF sensor, high-speed camera',
                 '6' => 'Drift angle, stabilization settling time, frame jitter frequency',
                 '7' => 'Settling time under 80ms following sudden 20 knot aerodynamic disturbance',

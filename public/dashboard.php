@@ -436,16 +436,25 @@ require_once __DIR__ . '/../templates/header.php';
           Policy P5.1 Compliance
         </div>
         <h2 class="text-xl font-bold text-gray-900">1. Facility Agreement & Terms with IDEAPAD</h2>
-        <p class="text-xs text-gray-500 mt-1">Review the foundational university terms and incubation agreement conditions before requesting seed funding.</p>
+        <p class="text-xs text-gray-500 mt-1">Review the foundational terms and incubation agreement conditions before requesting seed funding.</p>
       </div>
 
       <div class="p-5 rounded-xl bg-gray-50 border border-gray-200 text-xs text-gray-700 space-y-3 leading-relaxed max-h-72 overflow-y-auto">
-        <h4 class="font-bold text-gray-900 text-sm">Terms and Conditions of Seed Grant Allocation:</h4>
-        <ol class="list-decimal pl-5 space-y-2">
-          <?php foreach (Constants::TERMS_AND_CONDITIONS as $tc): ?>
-            <li><?= htmlspecialchars($tc) ?></li>
+        <h4 class="font-bold text-gray-900 text-sm"><?= htmlspecialchars(Constants::TERMS_TITLE) ?></h4>
+        <ul class="space-y-2.5 list-none pl-0">
+          <?php foreach (Constants::TERMS_AND_CONDITIONS as $termTitle => $termText): ?>
+            <li class="flex items-start gap-2">
+              <span class="text-blue-600 font-bold">•</span>
+              <div>
+                <strong class="text-gray-900"><?= htmlspecialchars($termTitle) ?>:</strong>
+                <span><?= htmlspecialchars($termText) ?></span>
+              </div>
+            </li>
           <?php endforeach; ?>
-        </ol>
+        </ul>
+        <div class="pt-2 text-center text-xs font-semibold text-gray-500 italic border-t border-gray-200">
+          <?= htmlspecialchars(Constants::TERMS_FOOTNOTE) ?>
+        </div>
       </div>
 
       <div class="p-4 rounded-xl bg-blue-50/60 border border-blue-200 flex items-start gap-3">
@@ -459,7 +468,7 @@ require_once __DIR__ . '/../templates/header.php';
           class="mt-1 h-5 w-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
         />
         <label for="agreementAccepted" class="text-xs text-gray-800 font-medium">
-          I on behalf of <strong><?= htmlspecialchars($startup['teamName']) ?></strong> agree to the facility and grant terms laid down by IDEAPAD and ITM University. I confirm that all team members are enrolled students / faculty of the university.
+          I on behalf of <strong><?= htmlspecialchars($startup['teamName']) ?></strong> agree to the facility and grant terms laid down by IDEAPAD and ITM Gwalior. I confirm that all team members are enrolled students / faculty of ITM Gwalior.
         </label>
       </div>
 

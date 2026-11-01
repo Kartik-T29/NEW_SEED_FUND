@@ -175,7 +175,7 @@ $pageTitle = match($type) {
             <img src="brand/ideapad-logo.png" alt="IDEAPAD Logo" class="h-16 w-auto object-contain">
             <div>
                 <h1 class="text-xl font-black tracking-tight text-slate-900 uppercase">IDEAPAD - Technology Business Incubator</h1>
-                <p class="text-xs font-semibold text-slate-600">ITM University Gwalior (M.P.), India | Innovation Fund Directorate</p>
+                <p class="text-xs font-semibold text-slate-600">ITM Gwalior (M.P.), India | Innovation Fund Directorate</p>
                 <p class="text-[10px] text-slate-500">Official Grant Governance Document under Seed Fund Policy 2026</p>
             </div>
         </div>
@@ -577,7 +577,7 @@ $pageTitle = match($type) {
         <!-- Official Sanction Clause Preamble -->
         <div class="mb-8 p-4 bg-emerald-50/50 rounded-xl border border-emerald-200 text-xs text-slate-800 leading-relaxed">
             <p>
-                Sanction of the Competent Authority is hereby accorded for the release of financial assistance under the <strong>IDEAPAD Innovation Fund</strong> of ITM University Gwalior to <strong><?= htmlspecialchars($app['teamName']) ?></strong>, represented by <strong><?= htmlspecialchars($app['founderName']) ?></strong> (Enrollment No. <?= htmlspecialchars($app['enrollmentNo']) ?>), for conducting validated prototyping, experimental setup, and proof-of-concept validation in accordance with the terms, timeline milestones, and moderated budget heads detailed hereunder.
+                Sanction of the Competent Authority is hereby accorded for the release of financial assistance under the <strong>IDEAPAD Innovation Fund</strong> of ITM Gwalior to <strong><?= htmlspecialchars($app['teamName']) ?></strong>, represented by <strong><?= htmlspecialchars($app['founderName']) ?></strong> (Enrollment No. <?= htmlspecialchars($app['enrollmentNo']) ?>), for conducting validated prototyping, experimental setup, and proof-of-concept validation in accordance with the terms, timeline milestones, and moderated budget heads detailed hereunder.
             </p>
         </div>
 
@@ -672,10 +672,13 @@ $pageTitle = match($type) {
 
         <!-- Institutional Terms & Grant Conditions -->
         <div class="mb-12 p-4 bg-slate-50 rounded-xl border border-slate-200 text-[11px] text-slate-700 space-y-2">
-            <div class="font-bold uppercase text-slate-900 text-xs">Statutory Sanction Conditions:</div>
-            <?php foreach (Constants::TERMS_AND_CONDITIONS as $termIdx => $termText): ?>
-                <p><?= $termIdx + 1 ?>. <?= htmlspecialchars($termText) ?></p>
+            <div class="font-bold uppercase text-slate-900 text-xs"><?= htmlspecialchars(Constants::TERMS_TITLE) ?></div>
+            <?php $cnt = 1; foreach (Constants::TERMS_AND_CONDITIONS as $termTitle => $termText): ?>
+                <p><strong><?= $cnt++ ?>. <?= htmlspecialchars($termTitle) ?>:</strong> <?= htmlspecialchars($termText) ?></p>
             <?php endforeach; ?>
+            <div class="text-[10px] font-semibold text-slate-500 pt-1 border-t border-slate-200 italic">
+                <?= htmlspecialchars(Constants::TERMS_FOOTNOTE) ?>
+            </div>
         </div>
 
         <!-- 5 Institutional Signature Blocks (Policy Requirement) -->
@@ -697,7 +700,7 @@ $pageTitle = match($type) {
                 <div class="border-t border-slate-400 pt-3">
                     <div class="font-bold text-slate-900">Prof. Ashish Chandel</div>
                     <div class="text-[10px] text-slate-600">Director, IDEAPAD Incubator</div>
-                    <div class="text-[9px] text-slate-500">Professor of Practice, ITMU</div>
+                    <div class="text-[9px] text-slate-500">Professor of Practice, ITM Gwalior</div>
                     <div class="text-[9px] font-mono text-emerald-700 mt-2 font-semibold">✓ Sanction Approved</div>
                 </div>
             </div>
@@ -705,12 +708,12 @@ $pageTitle = match($type) {
             <div class="grid grid-cols-2 gap-12 text-center text-xs max-w-lg mx-auto pt-6 border-t border-slate-200">
                 <div class="border-t border-slate-400 pt-3">
                     <div class="font-bold text-slate-900">Finance & Accounts Officer</div>
-                    <div class="text-[10px] text-slate-600">ITM University Gwalior</div>
+                    <div class="text-[10px] text-slate-600">ITM Gwalior</div>
                     <div class="text-[9px] font-mono text-slate-400 mt-2">[ Fund Disbursal Concurrence ]</div>
                 </div>
                 <div class="border-t border-slate-400 pt-3">
                     <div class="font-bold text-slate-900">Registrar</div>
-                    <div class="text-[10px] text-slate-600">ITM University Gwalior</div>
+                    <div class="text-[10px] text-slate-600">ITM Gwalior</div>
                     <div class="text-[9px] font-mono text-slate-400 mt-2">[ Institutional Authority ]</div>
                 </div>
             </div>

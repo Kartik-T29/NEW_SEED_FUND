@@ -249,7 +249,7 @@ require_once __DIR__ . '/../templates/header.php';
                     <span class="text-xs font-semibold px-2.5 py-1 rounded bg-slate-100 text-slate-600">8 Institutional Dates</span>
                 </div>
                 <p class="text-xs text-slate-500 mb-6">
-                    Key compliance checkpoints established under ITM University Innovation Fund regulations. Disbursals and reviews follow this sequence strictly.
+                    Key compliance checkpoints established under ITM Gwalior Innovation Fund regulations. Disbursals and reviews follow this sequence strictly.
                 </p>
 
                 <div class="relative border-l-2 border-indigo-200 ml-4 pl-6 space-y-6">
@@ -353,8 +353,8 @@ require_once __DIR__ . '/../templates/header.php';
             <div class="bg-slate-50 rounded-2xl p-6 border border-slate-200 text-xs">
                 <h4 class="font-bold text-slate-900 mb-2">Incubator Contact</h4>
                 <p class="text-slate-600 mb-1"><strong>IDEAPAD Technology Business Incubator</strong></p>
-                <p class="text-slate-500">ITM University, Opp. Sithouli Railway Station, NH-75, Gwalior (M.P.) - 474001</p>
-                <p class="text-slate-500 mt-2">Email: <a href="mailto:ideapad@itmuniversity.ac.in" class="text-indigo-600 underline">ideapad@itmuniversity.ac.in</a></p>
+                <p class="text-slate-500">ITM Gwalior, Opp. Sithouli Railway Station, NH-75, Gwalior (M.P.) - 474001</p>
+                <p class="text-slate-500 mt-2">Email: <a href="mailto:ideapad@itmgwalior.ac.in" class="text-indigo-600 underline">ideapad@itmgwalior.ac.in</a></p>
             </div>
         </div>
 

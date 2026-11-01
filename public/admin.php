@@ -292,7 +292,7 @@ if ($appId) {
           <label class="flex items-start gap-3 p-3.5 rounded-xl border border-gray-200 bg-blue-50/60 cursor-pointer">
             <input type="checkbox" name="termsAcknowledged" value="1" <?= !empty($existingFormB['termsAcknowledged']) ? 'checked' : '' ?> required class="mt-0.5 h-4 w-4 rounded text-blue-600 focus:ring-blue-500">
             <span class="text-xs text-gray-800 font-medium">
-              I certify that this grant sanction order complies with ITM University Innovation Fund policies, non-dilutive grant caps, and audit regulations.
+              I certify that this grant sanction order complies with ITM Gwalior Innovation Fund policies, non-dilutive grant caps, and audit regulations.
             </span>
           </label>
 

@@ -70,7 +70,7 @@ $stmt = $pdo->prepare('SELECT id FROM `User` WHERE email = ? LIMIT 1');
 $stmt->execute([$sec3Email]);
 if (!$stmt->fetch()) {
     $sec3Id = Auth::generateId('u');
-    $ins = $pdo->prepare('INSERT INTO `User` (id, email, name, passwordHash, role, approvalStatus, mustChangePassword, active, designation, department, createdAt) VALUES (?, ?, ?, ?, "SEC_MEMBER", "APPROVED", 0, 1, "Assistant Director (Startups)", "SOET, ITM University", NOW(3))');
+    $ins = $pdo->prepare('INSERT INTO `User` (id, email, name, passwordHash, role, approvalStatus, mustChangePassword, active, designation, department, createdAt) VALUES (?, ?, ?, ?, "SEC_MEMBER", "APPROVED", 0, 1, "Assistant Director (Startups)", "SOET, ITM Gwalior", NOW(3))');
     $ins->execute([$sec3Id, $sec3Email, 'Dr. Arun Singh Kushwah', Auth::hashPassword('Sec@2026Password!')]);
     echo "  [+] Created SEC 3: {$sec3Email} / Sec@2026Password!\n";
 } else {
@@ -150,7 +150,7 @@ if (!$founder) {
         ['CONSUMABLES', 'Custom 4-Layer Sensor PCBs and Electronic Components', 'JLCPCB & Robu.in', 14500.00, 1, 14500.00, 'Microcontrollers, Hall effect sensors, and passive components consumed during physical circuit board assembly.'],
         ['SOFTWARE', 'Edge ML Dataset Pipeline & Embedded Tooling Licenses', 'AWS / Edge Impulse', 6500.00, 1, 6500.00, 'Compute credits for training edge neural network models and compiling quantized firmware.'],
         ['TRAVEL', 'Travel to Industrial Solar Farms for Real-world Calibration', 'IRCTC & Local Mobility', 4000.00, 1, 4000.00, 'Travel to 3 regional utility installations to calibrate sensors under direct sunlight.'],
-        ['TESTING', 'Lab Testing and Signal Noise Calibration at University Lab', 'ITM University Research Lab', 4000.00, 1, 4000.00, 'EMI and thermal drift characterization tests.'],
+        ['TESTING', 'Lab Testing and Signal Noise Calibration at Lab', 'ITM Gwalior Research Lab', 4000.00, 1, 4000.00, 'EMI and thermal drift characterization tests.'],
         ['CONTINGENCY', 'Contingency / Small Spare Purchases (approx 6%)', 'Local Hardware Suppliers', 3000.00, 1, 3000.00, 'Unplanned replacement of blown fuses, passive resistors, and rapid breadboard connectors.']
     ];
 

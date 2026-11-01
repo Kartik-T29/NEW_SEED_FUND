@@ -11,7 +11,7 @@
 
 | Policy Clause | Policy Description / Requirement | Portal Implementation Location | Status | Implementation Details / Notes |
 | :--- | :--- | :--- | :--- | :--- |
-| **P1. Program & Purpose** | ITM University allocates yearly Innovation Fund to IDEAPAD; half-yearly audit; purpose: reach TRL 3 (PoC), validate assumptions/patents (TRL 2), provide professional exposure. Subject to TRL/MRL scales. | `config/constants.php`<br>`public/index.php`<br>`public/dashboard.php` | **Matches** | Clearly articulated on home page and dashboard banners. Availability explicitly tied to TRL/MRL criteria. |
+| **P1. Program & Purpose** | ITM Gwalior allocates yearly Innovation Fund to IDEAPAD; half-yearly audit; purpose: reach TRL 3 (PoC), validate assumptions/patents (TRL 2), provide professional exposure. Subject to TRL/MRL scales. | `config/constants.php`<br>`public/index.php`<br>`public/dashboard.php` | **Matches** | Clearly articulated on home page and dashboard banners. Availability explicitly tied to TRL/MRL criteria. |
 | **P2. Grant Types & Limits** | 5 grant tiers:<br>• **Ideation reward**: TRL 1, MRL 1; ₹1k–₹5k.<br>• **Validation Grant**: TRL 2, MRL 2; ₹5k–₹20k.<br>• **Proof Grant**: TRL 3, MRL 3; ₹25k–₹50k.<br>• **Scaling Grant**: TRL 4–5; ₹50k–₹500k.<br>• **Emergency Support Grant**: variable, case-by-case.<br>Max 3 grants per team unless waived by SEC. | `config/constants.php`<br>`public/dashboard.php`<br>`public/sec.php`<br>`public/admin.php` | **Matches** | Exact tier names and amounts applied across forms and dropdowns. Replaced older generic names with official policy names. |
 | **P3. SEC Composition** | Panel of 3 experts (Innovation/Product, Business/Finance, Market/Intelligence). Dynamic member profiles on Form A/B. | `database/schema.sql` (`User`)<br>`public/reports.php`<br>`public/sec.php` | **Matches** | Names, designations, and departments are dynamically rendered from approved SEC user profiles; no hardcoded names. |
 | **P4. SEC SOP (Checklist)** | 12-step SOP: presentation date, review pitch deck 2 days prior, carry Form A, check terms/paperwork, check prior funding, project presentation, TRL/MRL/IRL assessment, milestones, budget moderation under Annexure 1, approval/disapproval, notes, forward to Director. | `public/sec.php`<br>`public/reports.php` | **Matches** | Form A split view incorporates dedicated Pre-checks tab, status levels, shared milestones, 12 rubric questions, and budget moderation. |
@@ -31,7 +31,7 @@
 | **P8.4–6 Form A Recommendations** | Member recommendation note, grant evaluation choice (Validation, Proof, Scaling, None/Rejected), suggested budget under 9 heads. | `public/sec.php` (Tab 5) | **Matches** | Input note, tier selector, and budget moderation grid with real-time totals. |
 | **P9. Form B (Grant Report)** | Admin-filled sanction order: name, date, approved tier, approved budget (9 heads), approved timeline (8 dates), final recommendation, T&C, 5 signature blocks. | `public/admin.php`<br>`public/reports.php` | **Matches** | Captures all 8 timeline dates, 9 budget heads, override justification note, and 5 institutional signature blocks (VC, Dean, Director, Asst Director, SEC Member). |
 | **P10. Terms & Conditions** | No personal accounts, institute purchases, 6-month registration & equity agreement, sale vouchers submitted to incubator. | `config/constants.php`<br>`public/admin.php`<br>`public/reports.php` | **Matches** | Verbatim policy clauses rendered in sanction order and printable reports. |
-| **P11. Disbursement & Audit** | Direct vendor transfer / prepaid cards; no cash; property of university; expense reports + original invoices; half-yearly reports. | `public/admin.php`<br>`public/status.php` | **Matches** | Post-sanction invoice submission workflow and Admin report aggregation view. |
+| **P11. Disbursement & Audit** | Direct vendor transfer / prepaid cards; no cash; property of ITM Gwalior; expense reports + original invoices; half-yearly reports. | `public/admin.php`<br>`public/status.php` | **Matches** | Post-sanction invoice submission workflow and Admin report aggregation view. |
 
 ---
 
@@ -88,7 +88,7 @@ The following behavioral rules have been analyzed and implemented with clear gov
 ### i) Half-Yearly Transparency & Audit Reports
 * **Policy Rule**: Policy P11 requires IDEAPAD to publish half-yearly reports summarizing grants awarded, total disbursed amount, utilization, and impact.
 * **Behavior Implemented**: Admin console includes a dedicated Half-Yearly Report summary aggregating counts by tier, total sanctioned INR, disbursement status, and CSV export.
-* **Reasoning**: Fully automates university and external funding body audit preparation.
+* **Reasoning**: Fully automates institutional and external funding body audit preparation.
 
 ### j) Milestone Sets A and B Applicability
 * **Policy Rule**: Policy P4.8 notes milestones differ for Problem-Solution fit vs Entrepreneurial fit.

@@ -1,13 +1,13 @@
 # Operational Logic & System Architecture Guide (LOGIC.md)
 
-**Target Audience**: ERP Cell, ITM University IT Staff, Incubator Directors, and Administrative Staff.  
+**Target Audience**: ERP Cell, ITM Gwalior IT Staff, Incubator Directors, and Administrative Staff.  
 **System**: IDEAPAD Seed Fund Portal (Native PHP 8 + MySQL)
 
 ---
 
 ## 1. Executive Summary & Purpose
 
-The **IDEAPAD Seed Fund Portal** automates the entire lifecycle of innovation and seed grant funding at ITM University. It facilitates student startup applications, coordinates the three-member **Startup Evaluation Committee (SEC)** review panel, provides synchronized split-screen evaluation, and enables official **Form B Grant Sanction Orders** signed off by university authorities.
+The **IDEAPAD Seed Fund Portal** automates the entire lifecycle of innovation and seed grant funding at ITM Gwalior. It facilitates student startup applications, coordinates the three-member **Startup Evaluation Committee (SEC)** review panel, provides synchronized split-screen evaluation, and enables official **Form B Grant Sanction Orders** signed off by institutional authorities.
 
 The system is built entirely on native **PHP 8** and **MySQL (InnoDB)**, with zero external server dependencies, making it seamlessly compatible with standard cPanel / Apache environments and phpMyAdmin.
 
@@ -174,7 +174,7 @@ Policy P9 dictates that the incubator administration issues the definitive sanct
    7. *Final Submission Date*
    8. *Closure Date*
 4. **Approval Blocks**: Five official signatures:
-   - Vice Chancellor, ITM University
+   - Competent Authority, ITM Gwalior
    - Dean / HoD of applicant's School
    - Director, IDEAPAD
    - Assistant Director (Startups)

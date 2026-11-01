@@ -78,7 +78,7 @@ require_once __DIR__ . '/../templates/header.php';
             Your SEC Evaluator profile for <strong><?= htmlspecialchars($email ?? '') ?></strong> has been created with status <strong>PENDING</strong>.
           </p>
           <p class="text-xs text-yellow-700 leading-relaxed">
-            In compliance with university governance and confidentiality norms, access to applicant proposal dossiers and scoring sheets is restricted until the System Administrator verifies your appointment.
+            In compliance with institutional governance and confidentiality norms, access to applicant proposal dossiers and scoring sheets is restricted until the System Administrator verifies your appointment.
           </p>
         </div>
 
@@ -160,7 +160,7 @@ require_once __DIR__ . '/../templates/header.php';
             name="email" 
             required 
             value="<?= htmlspecialchars($_POST['email'] ?? '') ?>"
-            placeholder="evaluator@itmuniversity.ac.in"
+            placeholder="evaluator@itmgwalior.ac.in"
             class="w-full px-3.5 py-2.5 bg-gray-50 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-purple-600 focus:bg-white focus:outline-none"
           />
         </div>
