@@ -155,7 +155,7 @@ if (!$myAssessment) {
         $suggestedAmounts[$h] = 0;
     }
 
-    $insAss = $pdo->prepare('INSERT INTO `Assessment` (id, applicationId, memberId, assessmentDate, preChecks, statusForm, experimentForm, recommendation, suggestedGrant, suggestedAmounts, status, createdAt) VALUES (?, ?, ?, NOW(3), ?, ?, ?, "", ?, ?, "DRAFT", NOW(3))');
+    $insAss = $pdo->prepare('INSERT INTO `Assessment` (id, applicationId, memberId, assessmentDate, preChecks, statusForm, experimentForm, recommendation, suggestedGrant, suggestedAmounts, status) VALUES (?, ?, ?, NOW(3), ?, ?, ?, "", ?, ?, "DRAFT")');
     $insAss->execute([
         $assId,
         $appId,
