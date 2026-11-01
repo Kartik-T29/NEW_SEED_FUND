@@ -347,7 +347,7 @@ $appQueueStmt->execute();
 $allApplications = $appQueueStmt->fetchAll();
 
 // Fetch audit logs
-$logStmt = $pdo->prepare('SELECT * FROM `AuditLog` ORDER BY createdAt DESC LIMIT 20');
+$logStmt = $pdo->prepare('SELECT * FROM `AuditLog` ORDER BY at DESC LIMIT 20');
 $logStmt->execute();
 $auditLogs = $logStmt->fetchAll();
 
@@ -485,9 +485,9 @@ require_once __DIR__ . '/../templates/header.php';
         <div class="p-2.5 rounded-lg bg-gray-50 border flex items-center justify-between text-gray-600">
           <div>
             <strong class="text-blue-900"><?= htmlspecialchars($log['action']) ?></strong>
-            <span class="text-gray-400">on <?= htmlspecialchars($log['targetType']) ?> (<?= htmlspecialchars($log['targetId'] ?? '') ?>)</span>
+            <span class="text-gray-400">on <?= htmlspecialchars($log['entity'] ?? 'Entity') ?> (<?= htmlspecialchars($log['entityId'] ?? '') ?>)</span>
           </div>
-          <span class="text-gray-400"><?= htmlspecialchars($log['createdAt']) ?></span>
+          <span class="text-gray-400"><?= htmlspecialchars($log['at'] ?? '') ?></span>
         </div>
       <?php endforeach; ?>
     </div>
