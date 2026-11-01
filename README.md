@@ -38,15 +38,32 @@ The application is intended to be deployed locally for development and testing u
    - Use the **Import** tab to upload `database/schema.sql`.
    - Optionally run `database/seed.php` through the browser to populate sample data.
 
-3. **Configure the application**
-   - Open `config/constants.php` (or `config/database.php`) and update the DB credentials if the default XAMPP settings differ:
-     ```php
-     define('DB_HOST', 'localhost');
-     define('DB_NAME', 'seed_fund');
-     define('DB_USER', 'root');
-     define('DB_PASS', ''); // XAMPP default password is empty
+3. **Database configuration**
+   - Create an `.env` file in the project root with your DB credentials:
+     ```bash
+     # /home/kt/Desktop/seed_fund_itm/.env
+     DB_HOST=127.0.0.1
+     DB_PORT=3306
+     DB_DATABASE=seed_fund          # name you created in phpMyAdmin
+     DB_USERNAME=root
+     DB_PASSWORD=                  # leave empty for XAMPP default
      ```
-   - Save the changes.
+   - Load the `.env` file automatically (add this to the entry script, e.g., `public/index.php`):
+     ```php
+     <?php
+     require __DIR__ . '/../vendor/autoload.php';
+
+     $dotenv = Dotenv\Dotenv::createImmutable(__DIR__ . '/../');
+     $dotenv->load();
+     ```
+   - If the project does not yet include **vlucas/phpdotenv**, install it:
+     ```bash
+     composer require vlucas/phpdotenv
+     ```
+   - Verify the connection:
+     ```bash
+     php -r "require 'config/database.php'; echo App\\Config\\Database::getConnection() ? '✅ DB OK' : '❌ DB fail';"
+     ```
 
 4. **Start the server**
    - In the XAMPP Control Panel, start **Apache** and **MySQL**.
