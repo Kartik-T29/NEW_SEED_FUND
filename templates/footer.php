@@ -1,5 +1,6 @@
   </main>
 
+<?php if (empty($hideFooter)): ?>
   <!-- Institutional Footer (Hidden in print) -->
   <footer class="no-print bg-white border-t border-gray-200 mt-auto py-6">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-500">
@@ -14,6 +15,7 @@
       </div>
     </div>
   </footer>
+<?php endif; ?>
 
 </body>
 </html>

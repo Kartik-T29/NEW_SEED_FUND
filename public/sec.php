@@ -310,6 +310,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pageTitle = "SEC Evaluation Split View | " . htmlspecialchars($application['teamName']);
+$hideFooter = true;
 require_once __DIR__ . '/../templates/header.php';
 ?>
 
@@ -355,9 +356,25 @@ require_once __DIR__ . '/../templates/header.php';
   <!-- Main Split-Screen Workspace -->
   <div id="split-container" class="flex-1 flex overflow-hidden relative">
 
-    <!-- LEFT PANE: READ-ONLY STARTUP APPLICATION DOSSIER (Scrolls independently) -->
-    <div id="split-left-pane" class="w-full lg:w-1/2 h-full overflow-y-auto bg-gray-50 p-6 space-y-6 border-r border-gray-200">
+    <!-- LEFT PANE: READ-ONLY STARTUP APPLICATION DOSSIER (Scrolls independently with visible scrollbar) -->
+    <div id="split-left-pane" class="w-full lg:w-1/2 h-full overflow-y-scroll sec-split-scrollbar bg-gray-50 p-6 space-y-6 border-r border-gray-200">
       
+      <!-- Sticky Quick-Nav & Scroll Bar Indicator -->
+      <div class="sticky -top-6 -mx-6 -mt-6 px-6 py-2.5 bg-gray-50/95 backdrop-blur-xs border-b border-gray-200 z-10 flex items-center justify-between text-[11px] shadow-2xs">
+        <div class="flex items-center gap-1.5 font-bold text-gray-700">
+          <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path></svg>
+          <span>Startup Proposal Dossier</span>
+          <span class="text-[10px] text-gray-400 font-normal hidden sm:inline">(Scroll pane)</span>
+        </div>
+        <div class="flex items-center gap-1 text-[10px] overflow-x-auto scrollbar-none">
+          <a href="#dossier-sop" class="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-blue-50 hover:text-blue-700 font-medium transition-colors">Profile</a>
+          <a href="#dossier-levels" class="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-blue-50 hover:text-blue-700 font-medium transition-colors">TRL/MRL</a>
+          <a href="#dossier-milestones" class="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-blue-50 hover:text-blue-700 font-medium transition-colors">Milestones</a>
+          <a href="#dossier-experiment" class="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-blue-50 hover:text-blue-700 font-medium transition-colors">Experiments</a>
+          <a href="#dossier-grant" class="px-2 py-0.5 rounded bg-white border border-gray-200 text-gray-700 hover:bg-blue-50 hover:text-blue-700 font-medium transition-colors">Budget</a>
+        </div>
+      </div>
+
       <!-- Anchor: SOP & Basic Details -->
       <div id="dossier-sop" class="bg-white rounded-2xl p-6 shadow-xs border border-gray-200 space-y-4">
         <div class="flex items-center justify-between border-b pb-3">
@@ -405,6 +422,41 @@ require_once __DIR__ . '/../templates/header.php';
             <span class="block text-gray-500 text-[10px] uppercase font-bold">Claimed IRL</span>
             <span class="text-xl font-extrabold text-emerald-700">IRL <?= htmlspecialchars((string)($formData['selfAssessment']['irl'] ?? 1)) ?></span>
           </div>
+        </div>
+      </div>
+
+      <!-- Anchor: Milestones Self-Assessment -->
+      <div id="dossier-milestones" class="bg-white rounded-2xl p-6 shadow-xs border border-gray-200 space-y-3">
+        <div class="flex items-center justify-between border-b pb-2">
+          <h3 class="text-sm font-bold text-gray-900 uppercase tracking-wider">Startup Milestone Self-Assessment</h3>
+          <span class="text-[10px] text-gray-500 font-mono">Policy P6.9 Compliance</span>
+        </div>
+        <div class="space-y-2 text-xs">
+          <?php 
+            $milestones = $formData['selfAssessment']['milestones'] ?? [];
+            if (empty($milestones)): 
+          ?>
+            <p class="text-gray-500 italic p-3 bg-gray-50 rounded-xl">No milestone self-assessment recorded.</p>
+          <?php else: ?>
+            <?php foreach ($milestones as $mKey => $mVal): 
+              $isDone = is_array($mVal) ? (($mVal['status'] ?? '') === 'COMPLETED') : ($mVal === 'COMPLETED');
+              $mRemark = is_array($mVal) ? ($mVal['remarks'] ?? ($mVal['remark'] ?? '')) : '';
+            ?>
+              <div class="p-3 rounded-xl border <?= $isDone ? 'bg-emerald-50/50 border-emerald-200' : 'bg-gray-50 border-gray-200' ?> flex items-start justify-between gap-3">
+                <div class="space-y-1">
+                  <div class="font-bold text-gray-900 flex items-center gap-2">
+                    <span class="font-mono text-xs px-1.5 py-0.5 rounded <?= $isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700' ?>"><?= htmlspecialchars((string)$mKey) ?></span>
+                  </div>
+                  <?php if (!empty($mRemark)): ?>
+                    <p class="text-[11px] text-gray-600 italic">Remark: <?= htmlspecialchars((string)$mRemark) ?></p>
+                  <?php endif; ?>
+                </div>
+                <span class="shrink-0 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider <?= $isDone ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800' ?>">
+                  <?= $isDone ? 'Completed ✓' : 'Pending' ?>
+                </span>
+              </div>
+            <?php endforeach; ?>
+          <?php endif; ?>
         </div>
       </div>
 
@@ -478,7 +530,7 @@ require_once __DIR__ . '/../templates/header.php';
     </div>
 
     <!-- RIGHT PANE: INTERACTIVE SEC FORM A SCORING -->
-    <div id="split-right-pane" class="hidden lg:block w-full lg:w-1/2 h-full overflow-y-auto bg-white p-6 space-y-6">
+    <div id="split-right-pane" class="hidden lg:block w-full lg:w-1/2 h-full overflow-y-scroll bg-white p-6 space-y-6">
 
       <!-- Form A Navigation Tabs -->
       <div class="flex items-center gap-1 border-b border-gray-200 pb-3 overflow-x-auto scrollbar-none text-xs font-bold">

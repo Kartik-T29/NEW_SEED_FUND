@@ -22,6 +22,73 @@
   background-color: #3b82f6 !important;
 }
 
+/* Custom Visible Scrollbar for SEC Split View (Startup Form Side & Evaluation Pane) */
+#split-left-pane,
+.sec-split-scrollbar {
+  overflow-y: scroll !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #64748b #f1f5f9 !important;
+  scrollbar-gutter: stable;
+}
+
+#split-left-pane::-webkit-scrollbar,
+.sec-split-scrollbar::-webkit-scrollbar {
+  width: 10px !important;
+  height: 10px !important;
+  display: block !important;
+}
+
+#split-left-pane::-webkit-scrollbar-track,
+.sec-split-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9 !important;
+  border-left: 1px solid #cbd5e1 !important;
+}
+
+#split-left-pane::-webkit-scrollbar-thumb,
+.sec-split-scrollbar::-webkit-scrollbar-thumb {
+  background: #94a3b8 !important;
+  border-radius: 6px !important;
+  border: 2px solid #f1f5f9 !important;
+}
+
+#split-left-pane::-webkit-scrollbar-thumb:hover,
+.sec-split-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b !important;
+}
+
+#split-left-pane::-webkit-scrollbar-thumb:active,
+.sec-split-scrollbar::-webkit-scrollbar-thumb:active {
+  background: #475569 !important;
+}
+
+#split-right-pane {
+  overflow-y: scroll !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: #94a3b8 #f8fafc !important;
+  scrollbar-gutter: stable;
+}
+
+#split-right-pane::-webkit-scrollbar {
+  width: 10px !important;
+  height: 10px !important;
+  display: block !important;
+}
+
+#split-right-pane::-webkit-scrollbar-track {
+  background: #f8fafc !important;
+  border-left: 1px solid #e2e8f0 !important;
+}
+
+#split-right-pane::-webkit-scrollbar-thumb {
+  background: #cbd5e1 !important;
+  border-radius: 6px !important;
+  border: 2px solid #f8fafc !important;
+}
+
+#split-right-pane::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8 !important;
+}
+
 /* Print Styles for Vector Reports (Form A, Form B, Dossier) */
 @media print {
   body {
