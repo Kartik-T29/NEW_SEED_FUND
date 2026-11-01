@@ -1,0 +1,81 @@
+/* IDEAPAD Seed Fund Portal Stylesheet */
+
+@layer utilities {
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
+  }
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+/* Split-Pane Resizer */
+.split-divider {
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.split-divider:hover,
+.split-divider.is-dragging {
+  background-color: #3b82f6 !important;
+}
+
+/* Print Styles for Vector Reports (Form A, Form B, Dossier) */
+@media print {
+  body {
+    background-color: #ffffff !important;
+    color: #000000 !important;
+    font-size: 11pt !important;
+  }
+
+  /* Hide screen-only interactive elements */
+  .no-print,
+  nav,
+  header,
+  footer,
+  .print-hide,
+  button,
+  .btn,
+  .fixed,
+  .sticky {
+    display: none !important;
+  }
+
+  /* Show print-only containers */
+  .print-only {
+    display: block !important;
+  }
+
+  .print-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+
+  /* Ensure page breaks don't split tables or signature blocks */
+  .page-break-before {
+    page-break-before: always;
+  }
+  
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .page-break-avoid,
+  tr,
+  .signature-block,
+  .report-section {
+    page-break-inside: avoid;
+  }
+
+  /* Force borders and colors to print accurately */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+}
