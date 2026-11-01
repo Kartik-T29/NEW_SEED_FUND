@@ -184,7 +184,10 @@ $pageTitle = match($type) {
                 Status: <?= htmlspecialchars($app['status']) ?>
             </span>
             <div class="text-[11px] font-mono text-slate-500 mt-1">App ID: <?= htmlspecialchars($app['id']) ?></div>
-            <div class="text-[11px] text-slate-500">Date: <?= date('d M Y', strtotime($app['createdAt'])) ?></div>
+            <?php 
+                $createdTs = !empty($app['createdAt']) ? strtotime($app['createdAt']) : false;
+            ?>
+            <div class="text-[11px] text-slate-500">Date: <?= ($createdTs !== false) ? date('d M Y', $createdTs) : htmlspecialchars($app['createdAt'] ?? 'N/A') ?></div>
         </div>
     </div>
 
@@ -339,7 +342,11 @@ $pageTitle = match($type) {
                         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                         Electronically Signed & Submitted
                     </div>
-                    <div class="text-[10px] text-slate-500 mt-1">Timestamp: <?= date('d M Y, h:i A', strtotime($app['submittedAt'] ?? $app['createdAt'])) ?></div>
+                    <?php 
+                        $subDateRaw = $app['submittedAt'] ?? $app['createdAt'] ?? '';
+                        $subTs = !empty($subDateRaw) ? strtotime($subDateRaw) : false;
+                    ?>
+                    <div class="text-[10px] text-slate-500 mt-1">Timestamp: <?= ($subTs !== false) ? date('d M Y, h:i A', $subTs) : htmlspecialchars($subDateRaw) ?></div>
                 </div>
             </div>
         </div>
@@ -500,11 +507,15 @@ $pageTitle = match($type) {
                 <?php if (empty($assessments)): ?>
                     <p class="text-slate-400 italic">No member remarks recorded yet.</p>
                 <?php else: ?>
-                    <?php foreach ($assessments as $idx => $eval): ?>
+                    <?php foreach ($assessments as $idx => $eval): 
+                        $evalDateRaw = $eval['submittedAt'] ?? $eval['assessmentDate'] ?? 'now';
+                        $evalTs = !empty($evalDateRaw) ? strtotime($evalDateRaw) : false;
+                        $evalDateDisp = ($evalTs !== false) ? date('d M Y, h:i A', $evalTs) : htmlspecialchars($evalDateRaw);
+                    ?>
                         <div class="p-3 bg-slate-50 rounded-lg border border-slate-200">
                             <div class="flex justify-between items-center mb-1">
                                 <strong class="text-slate-900"><?= htmlspecialchars($eval['sec_name'] ?? 'SEC Evaluator') ?> <span class="font-normal text-slate-500">(<?= htmlspecialchars($eval['sec_designation'] ?? 'Panelist') ?>)</span></strong>
-                                <span class="text-[10px] text-slate-400"><?= date('d M Y, h:i A', strtotime($eval['submittedAt'] ?? $eval['assessmentDate'] ?? 'now')) ?></span>
+                                <span class="text-[10px] text-slate-400"><?= $evalDateDisp ?></span>
                             </div>
                             <div class="text-slate-700 whitespace-pre-wrap"><?= htmlspecialchars($eval['recommendation'] ?? 'No written notes provided.') ?></div>
                         </div>
@@ -524,8 +535,13 @@ $pageTitle = match($type) {
                         <div class="font-bold text-xs text-slate-900"><?= htmlspecialchars(($eval && !empty($eval['sec_name'])) ? $eval['sec_name'] : $panelRole['default_name']) ?></div>
                         <div class="text-[10px] text-slate-600"><?= htmlspecialchars($panelRole['domain']) ?></div>
                         <div class="text-[9px] text-slate-500"><?= htmlspecialchars(($eval && !empty($eval['sec_designation'])) ? $eval['sec_designation'] : $panelRole['default_designation']) ?></div>
+                        <?php
+                            $sigDateRaw = $eval['submittedAt'] ?? 'now';
+                            $sigTs = !empty($sigDateRaw) ? strtotime($sigDateRaw) : false;
+                            $sigDateDisp = ($sigTs !== false) ? date('d/m/Y', $sigTs) : htmlspecialchars($sigDateRaw);
+                        ?>
                         <div class="text-[10px] font-mono text-emerald-700 mt-2 font-semibold">
-                            <?= $eval ? 'Signed: ' . date('d/m/Y', strtotime($eval['submittedAt'] ?? 'now')) : '[ Signature Pending ]' ?>
+                            <?= $eval ? 'Signed: ' . $sigDateDisp : '[ Signature Pending ]' ?>
                         </div>
                     </div>
                 <?php endforeach; ?>
@@ -552,7 +568,11 @@ $pageTitle = match($type) {
             </div>
             <div>
                 <span class="text-slate-500 block text-[10px] uppercase">Sanction Date:</span>
-                <strong class="text-slate-800"><?= !empty($evalTimeline['sanctionDate']) ? date('d F Y', strtotime($evalTimeline['sanctionDate'])) : date('d F Y') ?></strong>
+                <?php 
+                    $sanctionTs = !empty($evalTimeline['sanctionDate']) ? strtotime($evalTimeline['sanctionDate']) : false;
+                    $sanctionDisp = ($sanctionTs !== false) ? date('d F Y', $sanctionTs) : (!empty($evalTimeline['sanctionDate']) ? htmlspecialchars($evalTimeline['sanctionDate']) : date('d F Y'));
+                ?>
+                <strong class="text-slate-800"><?= $sanctionDisp ?></strong>
             </div>
             <div>
                 <span class="text-slate-500 block text-[10px] uppercase">Startup / Grantee:</span>
